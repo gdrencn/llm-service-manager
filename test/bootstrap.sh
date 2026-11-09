@@ -27,5 +27,5 @@ llmsm_bootstrap=$(mktemp)
 trap 'rm -f "$llmsm_bootstrap"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
-curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.0/test/install.sh -o "$llmsm_bootstrap"
+curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.1/test/install.sh -o "$llmsm_bootstrap"
 sh "$llmsm_bootstrap"

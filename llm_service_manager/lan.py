@@ -310,10 +310,10 @@ def steps(c, snapshot):
         rows.append(
             Step(
                 t("Windows：一键配置", "Windows: one-command setup"),
-                windows_command(distro, port),
+                windows_command(),
                 t(
-                    "在普通 Windows PowerShell 粘贴执行，按 UAC 提示授权；逐步检测 NAT、端口及服务，再配置原生转发和防火墙。WSL 地址变化后重跑。不创建常驻服务。GitHub 仓库发布后下载入口才可用。",
-                    "Paste into ordinary Windows PowerShell and approve UAC. Checks NAT, port ownership and service reachability, then configures native forwarding and firewall. Rerun after WSL IP changes. No daemon. Download requires the GitHub repository to be published.",
+                    "在普通 Windows PowerShell 粘贴执行，按 UAC 提示授权；逐步检测 NAT、端口及服务，再配置原生转发和防火墙。WSL 地址变化后重跑。不创建常驻服务。发行版和端口由脚本交互选择。",
+                    "Paste into ordinary Windows PowerShell and approve UAC. Checks NAT, port ownership and service reachability, then configures native forwarding and firewall. Rerun after WSL IP changes. No daemon. Choose the distribution and port interactively.",
                 ),
                 bool(match and good and snapshot.get("network_mode") == "nat")
                 if win and ip

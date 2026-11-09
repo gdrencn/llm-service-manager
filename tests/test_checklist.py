@@ -35,8 +35,9 @@ class ChecklistTests(unittest.TestCase):
             ]
             self.assertTrue(all(row.action is None for row in rows))
             setup = next(r for r in rows if r.title == "Windows：一键配置")
-            self.assertIn("windows-lan.ps1", setup.command)
-            self.assertIn("-Distro 'llm' -Port 55555", setup.command)
+            self.assertIn("windows-bootstrap.ps1", setup.command)
+            self.assertNotIn("-Distro", setup.command)
+            self.assertNotIn("-Port", setup.command)
             self.assertEqual(setup.state, State.MANUAL)
 
     def test_linux_plan_uses_same_states(self):

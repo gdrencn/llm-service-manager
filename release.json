@@ -1,6 +1,6 @@
 {
-  "version": "0.10.0",
+  "version": "0.10.1",
   "channel": "test",
-  "tag": "v0.10.0",
+  "tag": "v0.10.1",
   "prerelease": true
 }

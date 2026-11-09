@@ -5,15 +5,9 @@ No scheduled task, daemon, or dependency on an installed llmsm. Rerun after a
 WSL IP change. Dot-source to load functions without executing configuration.
 #>
 [CmdletBinding()]
-param(
-    [Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string]$Distro,
-    [ValidateRange(1, 65535)][int]$Port = 55555,
-    [switch]$CheckOnly,
-    [switch]$Pause
-)
+param([switch]$CheckOnly, [string]$AdminTarget)
 
 $ErrorActionPreference = 'Stop'
-
 function Write-Step([string]$Title, [string]$Why) {
     Write-Host "`n$Title" -ForegroundColor Cyan
     Write-Host $Why
@@ -21,9 +15,65 @@ function Write-Step([string]$Title, [string]$Why) {
 
 function Invoke-Native([string]$Program, [string[]]$Arguments) {
     Write-Host ('$ ' + $Program + ' ' + (($Arguments | ForEach-Object { "'" + $_.Replace("'", "''") + "'" }) -join ' ')) -ForegroundColor DarkGray
-    $output = & $Program @Arguments 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "$Program failed ($LASTEXITCODE): $output" }
-    return ($output -join "`n")
+    $isWsl = [IO.Path]::GetFileName($Program) -eq 'wsl.exe'
+    $oldUtf8 = $env:WSL_UTF8
+    $oldEncoding = [Console]::OutputEncoding
+    try {
+        # Microsoft WSL's own diagnostics use this pair to capture readable output.
+        if ($isWsl) { $env:WSL_UTF8 = '1'; [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) }
+        $ErrorActionPreference = 'Continue'
+        $output = & $Program @Arguments 2>&1
+        $code = $LASTEXITCODE
+    } finally {
+        if ($isWsl) { $env:WSL_UTF8 = $oldUtf8; [Console]::OutputEncoding = $oldEncoding }
+    }
+    $text = ($output | ForEach-Object { [string]$_ }) -join "`n"
+    if ($code -ne 0) { throw "$Program failed ($code): $text" }
+    return $text
+}
+
+function Select-Target {
+    $names = @((Invoke-Native 'wsl.exe' @('--list', '--quiet')) -split "`r?`n" | ForEach-Object { $_.Trim().Trim([char]0) } | Where-Object { $_ })
+    if ($names.Count -eq 0) { throw 'No WSL distributions are registered for the current Windows user.' }
+    Write-Step 'Select the WSL server' 'Choose the distribution running your model service. Enter q to cancel.'
+    for ($i=0; $i -lt $names.Count; $i++) { Write-Host ("{0}. {1}" -f ($i+1), $names[$i]) }
+    while ($true) {
+        $answer = Read-Host 'Distribution number [1]'
+        if ($answer -eq 'q') { return $null }
+        if (-not $answer) { $answer = '1' }
+        $number = 0
+        if ([int]::TryParse($answer, [ref]$number) -and $number -ge 1 -and $number -le $names.Count) { break }
+        Write-Host 'Enter a number from the list.' -ForegroundColor Yellow
+    }
+    $name = $names[$number-1]
+    while ($true) {
+        $answer = Read-Host 'Service TCP port [55555] (q to cancel)'
+        if ($answer -eq 'q') { return $null }
+        if (-not $answer) { $answer = '55555' }
+        $portNumber = 0
+        if ([int]::TryParse($answer, [ref]$portNumber) -and $portNumber -ge 1 -and $portNumber -le 65535) { break }
+        Write-Host 'Enter a TCP port from 1 to 65535.' -ForegroundColor Yellow
+    }
+    return @{distro=$name; port=$portNumber}
+}
+
+function Resolve-WslTarget([string]$Distribution, [int]$ServicePort) {
+    Write-Step '[1/6] Check WSL networking' 'Read the selected distribution as the original Windows user, before elevation.'
+    $mode = (Invoke-Native 'wsl.exe' @('-d', $Distribution, '--cd', '/', '--exec', 'wslinfo', '--networking-mode')).Trim()
+    if ($mode -ne 'nat') { throw "Expected NAT, got '$mode'. No forwarding configured." }
+    $routeText = Invoke-Native 'wsl.exe' @('-d', $Distribution, '--cd', '/', '--exec', 'ip', '-j', '-4', 'route', 'get', '1.1.1.1')
+    $routes = @($routeText | ConvertFrom-Json)
+    if ($routes.Count -eq 0) { throw 'No default IPv4 route in the selected distribution.' }
+    $ip = [string]$routes[0].prefsrc
+    Assert-Target $Distribution $ServicePort $ip
+    Write-Host "WSL $Distribution -> $ip`:$ServicePort"
+    return $ip
+}
+
+function Assert-Target([string]$Distribution, [int]$ServicePort, [string]$IP) {
+    if ([string]::IsNullOrWhiteSpace($Distribution) -or $Distribution -match '[<>\r\n]' -or $ServicePort -lt 1 -or $ServicePort -gt 65535) { throw 'Invalid distribution or TCP port.' }
+    $address = $null
+    if (-not [Net.IPAddress]::TryParse($IP, [ref]$address) -or $address.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork -or [Net.IPAddress]::IsLoopback($address) -or $IP -eq '0.0.0.0') { throw "Invalid WSL IPv4: $IP" }
 }
 
 function Get-ProxyRows([string]$Text) {
@@ -34,20 +84,10 @@ function Get-ProxyRows([string]$Text) {
     }
 }
 
-function Invoke-LanSetup([string]$Distribution, [int]$ServicePort, [bool]$ReadOnly) {
-    Write-Step '[1/6] Check WSL networking' 'NAT needs Windows TCP forwarding. Do not change the WSL network mode.'
-    $mode = (Invoke-Native 'wsl.exe' @('-d', $Distribution, '--exec', 'wslinfo', '--networking-mode')).Trim()
-    if ($mode -ne 'nat') { throw "Expected NAT, got '$mode'. No forwarding configured. Update WSL if wslinfo is unavailable." }
-    $routeText = Invoke-Native 'wsl.exe' @('-d', $Distribution, '--exec', 'ip', '-j', '-4', 'route', 'get', '1.1.1.1')
-    $routes = @($routeText | ConvertFrom-Json)
-    if ($routes.Count -eq 0) { throw 'No default IPv4 route in the selected distribution.' }
-    $ip = [string]$routes[0].prefsrc
-    $address = $null
-    if (-not [Net.IPAddress]::TryParse($ip, [ref]$address) -or $address.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork -or [Net.IPAddress]::IsLoopback($address) -or $ip -eq '0.0.0.0') {
-        throw "Invalid WSL IPv4: $ip"
-    }
-    Write-Host "WSL $Distribution -> $ip`:$ServicePort"
-
+function Invoke-LanSetup([string]$Distribution, [int]$ServicePort, [bool]$ReadOnly, [string]$IP) {
+    # The elevated worker never opens WSL under a different Windows identity.
+    Assert-Target $Distribution $ServicePort $IP
+    $ip = $IP
     Write-Step '[2/6] Check the LAN and backend' 'Allow only Private networks and LocalSubnet. Keep existing network profiles unchanged.'
     Write-Host '$ Get-NetConnectionProfile; Get-NetIPConfiguration' -ForegroundColor DarkGray
     $profiles = @(Get-NetConnectionProfile | Where-Object NetworkCategory -eq 'Private')
@@ -127,26 +167,57 @@ function Invoke-LanSetup([string]$Distribution, [int]$ServicePort, [bool]$ReadOn
     Write-Host 'Done. No llmsm process or scheduled task is needed. WSL and the model service must remain running.'
 }
 
+function Test-Administrator {
+    return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Get-InlineSudo {
+    $sudo = Join-Path $env:SystemRoot 'System32\sudo.exe'
+    if (-not (Test-Path -LiteralPath $sudo)) {
+        throw 'Microsoft Sudo for Windows is missing. Windows 11 24H2 or later is required. Update Windows, enable sudo in Settings > System > Advanced, select Inline, then rerun this script.'
+    }
+    $settings = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Sudo' -ErrorAction SilentlyContinue
+    $policy = Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Sudo' -ErrorAction SilentlyContinue
+    if ($null -ne $policy.Enabled -and $policy.Enabled -lt 3) {
+        throw 'Windows policy restricts sudo Inline mode. Ask your administrator to allow Inline mode, then run sudo config --enable normal in administrator PowerShell and rerun this script.'
+    }
+    if ($settings.Enabled -ne 3) {
+        $reason = if ($null -eq $settings.Enabled -or $settings.Enabled -eq 0) { 'Microsoft sudo is not enabled.' } else { 'Microsoft sudo is enabled, but is not configured for Inline mode.' }
+        throw "$reason`nOpen PowerShell as administrator and run:`n`n    sudo config --enable normal`n`nThen return to ordinary PowerShell and rerun this script."
+    }
+    return $sudo
+}
+
+function Require-Environment {
+    $sudo = Get-InlineSudo
+    if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) { throw 'WSL is not installed. Install WSL2 and prepare the Linux model service, then rerun this script.' }
+    return $sudo
+}
+
+function Invoke-Setup([bool]$ReadOnly, [string]$ScriptPath) {
+    Write-Step 'Check environment' 'Requires WSL and Microsoft Sudo for Windows enabled in Inline mode.'
+    $sudo = Require-Environment
+    $target = Select-Target
+    if ($null -eq $target) { Write-Host 'Cancelled; no changes made.'; return }
+    $ip = Resolve-WslTarget $target.distro $target.port
+    $payload = @{distro=$target.distro; port=$target.port; ip=$ip; checkOnly=$ReadOnly} | ConvertTo-Json -Compress
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload))
+    Write-Step 'Configure Windows through sudo' 'Approve UAC if prompted. Commands, verification and results stay in this terminal.'
+    $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    & $sudo --inline $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ScriptPath -AdminTarget $encoded
+    if ($LASTEXITCODE -ne 0) { throw 'Configuration failed; see the error above. No alternative elevation or automatic retry.' }
+}
+
 if ($MyInvocation.InvocationName -ne '.') {
     try {
-        $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-        if (-not $admin) {
-            if (-not $PSCommandPath) { throw 'Download this script to a file before running it so it can request elevation.' }
-            Write-Step 'Request Windows administrator approval' 'Windows requires UAC approval for firewall and portproxy configuration. No need to open an administrator terminal manually.'
-            $call = "& '" + $PSCommandPath.Replace("'", "''") + "' -Distro '" + $Distro.Replace("'", "''") + "' -Port $Port -Pause"
-            if ($CheckOnly) { $call += ' -CheckOnly' }
-            $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($call + '; exit $LASTEXITCODE'))
-            $child = Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Verb RunAs -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded) -Wait -PassThru
-            if ($child.ExitCode -ne 0) { throw "Elevated setup failed (exit $($child.ExitCode)). See the elevated window output." }
-        } else {
-            Invoke-LanSetup $Distro $Port ([bool]$CheckOnly)
-        }
-        if ($Pause) { Read-Host 'Press Enter to close' | Out-Null }
-        exit 0
+        if ($AdminTarget) {
+            if (-not (Test-Administrator)) { throw 'The configuration command requires Windows administrator privileges.' }
+            $target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($AdminTarget)) | ConvertFrom-Json
+            Invoke-LanSetup ([string]$target.distro) ([int]$target.port) ([bool]$target.checkOnly) ([string]$target.ip)
+        } else { Invoke-Setup ([bool]$CheckOnly) $PSCommandPath }
     } catch {
-        Write-Host ("Setup stopped: " + $_.Exception.Message) -ForegroundColor Red
-        Write-Host 'Completed native changes remain in place. Fix the reported problem and rerun; no unrelated settings were reset.'
-        if ($Pause) { Read-Host 'Press Enter to close' | Out-Null }
+        Write-Host ('Setup stopped: ' + $_.Exception.Message) -ForegroundColor Red
+        Write-Host 'Stopped without proceeding to later steps. Follow the guidance above, then rerun.'
         exit 1
     }
 }

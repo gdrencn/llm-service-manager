@@ -16,15 +16,24 @@ def is_wsl():
 
 
 def windows_content(c):
-    distro = os.environ.get("WSL_DISTRO_NAME", "<WSL发行版名称>")
     port = value(c, "port")
     return [
         rich((t("一键命令", "Setup command"), "group")),
-        rich((command(distro, port), "command")),
+        rich((command(), "command")),
         "",
         t(
-            "复制到 Windows 普通 PowerShell 执行，根据 UAC 提示授权，无需手动开启管理员终端。",
-            "Paste into ordinary Windows PowerShell and approve UAC; no manually elevated terminal is needed.",
+            f"本机当前服务端口：{port}。运行脚本后选择发行版，并输入对应端口。",
+            f"Current server port: {port}. Select the distribution and enter its port in the script.",
+        ),
+        t(
+            "复制到 Windows 普通 PowerShell 执行，在原窗口选择发行版和端口，再根据 UAC 提示授权。",
+            "Paste into ordinary Windows PowerShell then choose the distribution and port in the same console before approving UAC.",
+        ),
+        "",
+        rich((t("环境要求", "Requirements"), "group")),
+        t(
+            "Windows 11 24H2 或更新，已启用微软 Sudo for Windows 的 Inline 模式。未启用时会提示用管理员 PowerShell 执行 sudo config --enable normal 后重跑；缺组件或策略限制分别说明。",
+            "Windows 11 24H2 or later with Microsoft Sudo for Windows enabled in Inline mode. If disabled, run sudo config --enable normal in administrator PowerShell and rerun; missing components and policy restrictions get separate guidance.",
         ),
         "",
         rich((t("执行内容", "What it does"), "group")),

@@ -27,11 +27,17 @@ blob = git(
     "HEAD",
 )
 (out / name).write_bytes(gzip.compress(blob, mtime=0))
-(out / "windows-lan.ps1").write_bytes((root / "scripts/windows-lan.ps1").read_bytes())
+for script in ("windows-lan.ps1", "windows-bootstrap.ps1"):
+    (out / script).write_bytes((root / "scripts" / script).read_bytes())
 (out / "RELEASE.json").write_text(
     json.dumps(dict(version, commit=commit, archive=name), indent=2) + "\n"
 )
-assets = [out / name, out / "windows-lan.ps1", out / "RELEASE.json"]
+assets = [
+    out / name,
+    out / "windows-lan.ps1",
+    out / "windows-bootstrap.ps1",
+    out / "RELEASE.json",
+]
 (out / "SHA256SUMS").write_text(
     "".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n" for p in assets)
 )

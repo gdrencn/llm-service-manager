@@ -1,10 +1,11 @@
 # Standalone regression harness; no Pester and no real network mutations.
-param([string]$Source)
+param([string]$Source, [string]$SourcePath)
+if ($SourcePath) { $Source = [IO.File]::ReadAllText($SourcePath) }
 $ErrorActionPreference = 'Stop'
 $tokens = $null; $errors = $null
 [System.Management.Automation.Language.Parser]::ParseInput($Source, [ref]$tokens, [ref]$errors) | Out-Null
 if ($errors.Count) { throw ($errors | Out-String) }
-. ([scriptblock]::Create($Source)) -Distro 'test'
+. ([scriptblock]::Create($Source))
 $script:changes = 0
 $script:mode = 'nat'
 $script:proxyText = ''
@@ -14,6 +15,7 @@ $script:reachable = $true
 function Invoke-Native([string]$Program, [string[]]$Arguments) {
     $cmd = $Arguments -join ' '
     if ($Program -eq 'wsl.exe') {
+        if ($cmd -eq '--list --quiet') { return "Ubuntu`nllm" }
         if ($cmd -like '*--networking-mode') { return $script:mode }
         return '[{"prefsrc":"172.28.1.2"}]'
     }
@@ -39,21 +41,81 @@ function Get-NetFirewallAddressFilter { [pscustomobject]@{RemoteAddress='LocalSu
 function Assert([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Expect-Failure([string]$Pattern) {
     $before = $script:changes
-    try { Invoke-LanSetup 'test' 55555 $false; throw 'Expected failure' }
+    try { Invoke-LanSetup 'test' 55555 $false '172.28.1.2'; throw 'Expected failure' }
     catch { if ($_.Exception.Message -notlike $Pattern) { throw } }
     Assert ($script:changes -eq $before) 'Failure path mutated Windows state'
 }
-Invoke-LanSetup 'test' 55555 $true
+Invoke-LanSetup 'test' 55555 $true '172.28.1.2'
 Assert ($script:changes -eq 0) 'CheckOnly mutated Windows state'
-Invoke-LanSetup 'test' 55555 $false
+Invoke-LanSetup 'test' 55555 $false '172.28.1.2'
 Assert ($script:changes -eq 2) 'Expected exactly one native proxy and firewall write'
-Invoke-LanSetup 'test' 55555 $false
+Invoke-LanSetup 'test' 55555 $false '172.28.1.2'
 Assert ($script:changes -eq 4) 'Rerun failed to update native configuration'
-$script:mode = 'mirrored'; Expect-Failure '*Expected NAT*'; $script:mode = 'nat'
+$script:mode = 'mirrored'
+try { Resolve-WslTarget 'test' 55555; throw 'Expected NAT failure' } catch { if ($_.Exception.Message -notlike '*Expected NAT*') { throw } }
+$script:mode = 'nat'
 $script:reachable = $false; Expect-Failure '*cannot reach*'; $script:reachable = $true
 $script:proxyText = '0.0.0.0 55555 172.28.1.99 55555'; $script:fw = @()
 Expect-Failure '*different portproxy*'
 $script:proxyText = ''; $script:busy = $true; Expect-Failure '*occupied*'; $script:busy = $false
 $script:fw = @([pscustomobject]@{Name='llmsm-LAN-TCP-55555';Description='someone else'})
 Expect-Failure '*another owner*'
+# Interactive validation never passes unfilled placeholders into WSL.
+$script:answers = [Collections.Generic.Queue[string]]::new()
+foreach ($answer in @('bad', '3', '2', '70000', '55556')) { $script:answers.Enqueue($answer) }
+function Read-Host { return $script:answers.Dequeue() }
+$selected = Select-Target
+Assert ($selected.distro -eq 'llm' -and $selected.port -eq 55556) 'Interactive selection failed'
+$script:answers.Enqueue('q')
+Assert ($null -eq (Select-Target)) 'Cancel should not request elevation'
+$script:answers.Enqueue(''); $script:answers.Enqueue('')
+$selected = Select-Target
+Assert ($selected.distro -eq 'Ubuntu' -and $selected.port -eq 55555) 'Defaults failed'
+try { Assert-Target '<placeholder>' 55555 '172.28.1.2'; throw 'Expected invalid target' } catch { if ($_.Exception.Message -notlike '*Invalid distribution*') { throw } }
+# The Windows-only worker never tries to enter WSL after changing identity.
+function Invoke-Native([string]$Program, [string[]]$Arguments) { if ($Program -eq 'wsl.exe') { throw 'Worker must not access WSL' }; if (($Arguments -join ' ') -like '*portproxy show*') { return '' }; return '' }
+$script:fw = @(); Invoke-LanSetup 'test' 55555 $true '172.28.1.2'
+# Prerequisite diagnostics distinguish missing binaries, settings and policy.
+$realSudoCheck = ${function:Get-InlineSudo}
+$script:binaryPresent = $false
+$script:modeValue = $null
+$script:policyValue = $null
+function Test-Path { return $script:binaryPresent }
+function Get-ItemProperty([string]$Path) {
+    if ($Path -like '*Policies*') { return @{Enabled=$script:policyValue} }
+    return @{Enabled=$script:modeValue}
+}
+try { Get-InlineSudo; throw 'Expected missing sudo' } catch { if ($_.Exception.Message -notlike '*missing*Windows 11 24H2*') { throw } }
+$script:binaryPresent = $true
+foreach ($mode in @($null, 0, 1, 2)) {
+    $script:modeValue = $mode
+    try { Get-InlineSudo; throw 'Expected setup guidance' } catch {
+        if ($_.Exception.Message -notlike '*sudo config --enable normal*ordinary PowerShell*') { throw }
+    }
+}
+$script:modeValue = 3
+Assert ((Get-InlineSudo) -like '*sudo.exe') 'Enabled Inline mode was rejected'
+$script:policyValue = 1
+try { Get-InlineSudo; throw 'Expected policy restriction' } catch { if ($_.Exception.Message -notlike '*policy restricts*administrator*') { throw } }
+$script:policyValue = $null
+Assert ($Source -notmatch 'Start-Process|RunAs|EventLog|WorkerRequest|Receive-Events') 'Fallback machinery must not be present'
+# The only elevation path is sudo --inline; target is passed as structured data.
+$script:sudoCalls = 0
+$script:sudoExit = 0
+function Get-InlineSudo { return 'Invoke-FakeSudo' }
+function Select-Target { return @{distro='test server';port=55556} }
+function Resolve-WslTarget { return '172.28.1.2' }
+function Invoke-FakeSudo {
+    $script:sudoCalls++
+    Assert ($args[0] -eq '--inline') 'Must use inline sudo'
+    $target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($args[-1])) | ConvertFrom-Json
+    Assert ($target.distro -eq 'test server' -and $target.port -eq 55556 -and $target.ip -eq '172.28.1.2') 'Target data was corrupted'
+    $global:LASTEXITCODE = $script:sudoExit
+}
+Invoke-Setup $true 'test.ps1'
+Assert ($script:sudoCalls -eq 1) 'Sudo was not called exactly once'
+$script:sudoExit = 1
+try { Invoke-Setup $false 'test.ps1'; throw 'Expected elevation failure' }
+catch { if ($_.Exception.Message -notlike '*Configuration failed*') { throw } }
+Assert ($script:sudoCalls -eq 2) 'Failed elevation was retried'
 Write-Host 'WINDOWS_MOCK_REGRESSIONS_PASSED'
