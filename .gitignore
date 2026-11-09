@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+*.log
+*-validation.json
+validation.json
+
+.ruff_cache/

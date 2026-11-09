@@ -1,0 +1,8 @@
+#!/usr/bin/python3
+import runpy
+import sys
+from pathlib import Path
+
+root = Path("/opt/llm-service-manager")
+sys.path.insert(0, str(root / "current" if (root / "current").is_dir() else root))
+runpy.run_module("llm_service_manager", run_name="__main__")

@@ -1,0 +1,19 @@
+#!/bin/sh
+# Also embedded verbatim in README.md. Only obtains the official project installer.
+set -eu
+@ROOT_HELPER@
+
+if ! command -v curl >/dev/null 2>&1 || { [ ! -f /etc/ssl/certs/ca-certificates.crt ] && [ ! -f /etc/pki/tls/certs/ca-bundle.crt ]; }; then
+ if command -v apt-get >/dev/null 2>&1; then
+  as_root apt-get update
+  as_root apt-get install -y ca-certificates curl
+ elif command -v dnf >/dev/null 2>&1; then as_root dnf install -y ca-certificates curl
+ else echo 'No supported package manager (apt/dnf). Cannot provision curl automatically.' >&2; exit 1
+ fi
+fi
+llmsm_bootstrap=$(mktemp)
+trap 'rm -f "$llmsm_bootstrap"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/@BOOTSTRAP_REF@/@INSTALL_PATH@ -o "$llmsm_bootstrap"
+sh "$llmsm_bootstrap"
