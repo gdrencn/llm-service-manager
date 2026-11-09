@@ -31,7 +31,7 @@ class QualityTests(unittest.TestCase):
                 "/var/lib/llm-service-manager",
             ):
                 self.assertNotIn(prefix, content)
-        self.assertIn("/etc/strata/llmsm.json", files)
+        self.assertIn("/etc/strata/strata-local.json", files)
 
     def test_atomic_write_preserves_restrictive_permissions(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -163,7 +163,7 @@ class QualityTests(unittest.TestCase):
         c = fixture()
         c["runtime"]["home"] = "/home/a$b"
         unit = native(c, backends=["llama.cpp"])[
-            "/etc/systemd/system/llm-llama.service"
+            "/etc/systemd/system/llama-server-local.service"
         ]
         self.assertIn('Environment="HOME=/home/a$b"', unit)
         self.assertIn('"/home/a$$b/.local/bin/llama"', unit)
@@ -206,7 +206,8 @@ class QualityTests(unittest.TestCase):
     def test_ollama_has_no_private_runner_passthrough(self):
         files = native(fixture(), backends=["ollama"])
         self.assertNotIn(
-            "LLAMA_ARG_", files["/etc/systemd/system/ollama.service.d/llm.conf"]
+            "LLAMA_ARG_",
+            files["/etc/systemd/system/ollama.service.d/ollama-local.conf"],
         )
         self.assertNotIn("ollama", config.SPECS["fit"][2])
         self.assertNotIn("ollama", config.SPECS["mtp_kv"][2])

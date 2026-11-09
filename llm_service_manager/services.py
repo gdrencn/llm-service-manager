@@ -9,14 +9,21 @@ from .config import Error, address, model, value
 from .execution import Operations
 from .model_names import public_name
 from .network import check_bind
-from .paths import CONFIG, OLLAMA_MODELFILE, STRATA_CONFIG, UNITS
+from .paths import (
+    ALL_UNITS,
+    CONFIG,
+    LEGACY_UNITS,
+    OLLAMA_MODELFILE,
+    STRATA_CONFIG,
+    UNITS,
+)
 from .storage import read_config
 
 
 class Services(Operations):
     def available_units(self):
         found = []
-        for unit in UNITS.values():
+        for unit in ALL_UNITS:
             r = self.run(
                 ["systemctl", "show", unit, "--property=LoadState", "--value"], False
             )
@@ -106,9 +113,9 @@ class Services(Operations):
                 ]
             )
 
-    def wait_ready(self, c, b):
+    def wait_ready(self, c, b, unit=None):
         url = "http://" + address(value(c, "host"), value(c, "port"), True)
-        unit = UNITS[b]
+        unit = unit or UNITS[b]
         deadline = time.monotonic() + 900
         endpoint = "/api/tags" if b == "ollama" else "/health"
         while True:
@@ -127,7 +134,7 @@ class Services(Operations):
                     raise Error("服务已停止或启动失败，请查看日志")
                 time.sleep(2)
 
-    def create_ollama_model(self, c):
+    def create_ollama_model(self, c, modelfile=OLLAMA_MODELFILE):
         executable = program(c, "ollama")
         if executable is None:
             raise Error("Ollama程序不存在")
@@ -139,17 +146,17 @@ class Services(Operations):
                 "create",
                 public_name(model(c, "ollama")),
                 "-f",
-                OLLAMA_MODELFILE,
+                modelfile,
             ],
             timeout=120,
         )
 
-    def ready(self, c, b):
-        url = self.wait_ready(c, b)
-        unit = UNITS[b]
+    def ready(self, c, b, unit=None, modelfile=OLLAMA_MODELFILE):
+        unit = unit or UNITS[b]
+        url = self.wait_ready(c, b, unit)
         m = model(c, b)
         if b == "ollama":
-            self.create_ollama_model(c)
+            self.create_ollama_model(c, modelfile)
             tag = public_name(m)
             request = {
                 "model": tag,
@@ -205,10 +212,22 @@ class Services(Operations):
     def restored(self, txn):
         c = read_config(Path(txn.get("config_path", str(CONFIG))))
         for unit in txn["active"]:
-            backend = next(key for key, val in UNITS.items() if val == unit)
+            backend = next(
+                key
+                for key, val in (*UNITS.items(), *LEGACY_UNITS.items())
+                if val == unit
+            )
             try:
                 model(c, backend)
             except Error:
-                self.wait_ready(c, backend)
+                self.wait_ready(c, backend, unit)
             else:
-                self.ready(c, backend)
+                modelfile = OLLAMA_MODELFILE
+                legacy = "/etc/ollama/llmsm.Modelfile"
+                if (
+                    backend == "ollama"
+                    and not Path(modelfile).exists()
+                    and Path(legacy).exists()
+                ):
+                    modelfile = legacy
+                self.ready(c, backend, unit=unit, modelfile=modelfile)

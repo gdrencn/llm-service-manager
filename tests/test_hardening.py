@@ -130,9 +130,10 @@ class HardeningTests(unittest.TestCase):
         c = fixture()
         c["catalog"][2]["config_path"] = "/missing/strata.json"
         result = native(c, backends=["ollama"])
-        self.assertNotIn("/etc/strata/llmsm.json", result)
+        self.assertNotIn("/etc/strata/strata-local.json", result)
         self.assertNotIn(
-            "ExecStartPost", result["/etc/systemd/system/ollama.service.d/llm.conf"]
+            "ExecStartPost",
+            result["/etc/systemd/system/ollama.service.d/ollama-local.conf"],
         )
         self.assertNotIn("/etc/llm-service-manager/ollama-boot.json", result)
 
@@ -145,7 +146,7 @@ class HardeningTests(unittest.TestCase):
                 self.assertNotIn("/opt/llm-service-manager", content)
         self.assertIn(
             '/.local/bin/strata" "serve" "--profile"',
-            files["/etc/systemd/system/llm-strata.service"],
+            files["/etc/systemd/system/strata-local.service"],
         )
 
     def test_server_readiness_does_not_generate_text(self):

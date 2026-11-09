@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .availability import available_backends
 from .config import SPECS, Error, address, model, value
-from .paths import UNITS
+from .paths import existing_unit
 from .presentation import formatted, label, render, rich, section, t
 from .services import Services as Ops
 
@@ -17,7 +17,7 @@ def collect(c, ops=None):
     ops = ops or Ops(quiet=True)
     result = {"services": {}, "runtime": {}, "errors": [], "gpu": [], "memory": {}}
     for b in available_backends(c):
-        unit = UNITS[b]
+        unit = existing_unit(b)
         try:
             r = ops.run(
                 [

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from ..config import Error, model, value
-from ..paths import STRATA_CONFIG
+from ..paths import STRATA_CONFIG, UNITS
 from .common import service
 
 
@@ -63,7 +63,7 @@ def render(c, read):
         port=v("port"),
         idle_unload_s=v("idle_seconds"),
         open_browser=False,
-        log=str(home / ".local/state/strata/llmsm-engine.log"),
+        log=str(home / ".local/state/strata/strata-local.log"),
     )
     out[STRATA_CONFIG] = json.dumps(cfg, ensure_ascii=False, indent=2) + "\n"
     a = [
@@ -76,7 +76,7 @@ def render(c, read):
         "--port",
         str(v("port")),
     ]
-    out["/etc/systemd/system/llm-strata.service"] = service(
+    out["/etc/systemd/system/" + UNITS[b]] = service(
         c,
         b,
         a,

@@ -51,17 +51,18 @@ class ModelNamesTests(unittest.TestCase):
         c["model_selection"]["llama.cpp"] = "initial-llamacpp"
         result = native(c, lambda _: json.dumps(STRATA))
         self.assertIn(
-            '"--alias" "model"', result["/etc/systemd/system/llm-llama.service"]
+            '"--alias" "model"',
+            result["/etc/systemd/system/llama-server-local.service"],
         )
         self.assertNotIn(
-            "initial-llamacpp", result["/etc/systemd/system/llm-llama.service"]
+            "initial-llamacpp", result["/etc/systemd/system/llama-server-local.service"]
         )
 
     def test_strata_preserves_official_name_verbatim(self):
         source = dict(STRATA, model_name="qwen3.8-flash-next-nvfp4-nvfp4")
         result = native(fixture(), lambda _: json.dumps(source))
         self.assertEqual(
-            json.loads(result["/etc/strata/llmsm.json"])["model_name"],
+            json.loads(result["/etc/strata/strata-local.json"])["model_name"],
             source["model_name"],
         )
 

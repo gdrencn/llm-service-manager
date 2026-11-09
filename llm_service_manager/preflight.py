@@ -7,12 +7,12 @@ from pathlib import Path
 from .artifacts import (
     complete_asset,
     gguf_set,
-    manifest_relative,
     ollama_manifest,
     strata_assets,
 )
 from .availability import available_backends, executable, program
 from .config import model, validate, value, warnings
+from .ollama_store import manifest_path
 from .paths import ollama_roots
 
 
@@ -55,9 +55,7 @@ def preflight(c, b):
             errors.append("当前Ollama适配器不能禁用模型自带视觉组件；该项需保持开启")
         found = False
         for root in ollama_roots(home):
-            if not (
-                root / "manifests" / manifest_relative(m.get("source", ""))
-            ).is_file():
+            if not manifest_path(root, m.get("source", "")).is_file():
                 continue
             found = True
             try:

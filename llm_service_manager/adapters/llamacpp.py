@@ -4,6 +4,7 @@ from pathlib import Path
 
 from ..config import model, value
 from ..model_names import public_name
+from ..paths import UNITS
 from .common import service
 
 
@@ -67,5 +68,5 @@ def render(c, read):
         ]
         if m.get("mtp_path"):
             a += ["--spec-draft-model", m["mtp_path"]]
-    out["/etc/systemd/system/llm-llama.service"] = service(c, b, a)
+    out["/etc/systemd/system/" + UNITS[b]] = service(c, b, a)
     return out

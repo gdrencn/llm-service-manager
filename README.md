@@ -1,4 +1,4 @@
-# llm-service-manager 0.10.3 test
+# llm-service-manager 0.10.4 test
 
 独立开发的 Linux/systemd 本地模型服务管理工具。管理 Ollama、llama.cpp 和 Strata，
 一份共享配置，任一时间仅运行一个底座。仅管理服务端底座及模型。
@@ -8,7 +8,7 @@
 支持 apt/dnf 系 Linux（如 Ubuntu 22.04+、Debian 12+、较新的 Fedora），Python 3.10+。
 目标是全新机器：不要求预装 Python、sudo、curl、模型或底座。下面是一段可整体粘贴执行的入口命令，
 缺 curl/CA 证书时先通过系统包管理器补齐，再获取安装器。安装器自动补齐其余工具依赖。
-当前仅发布 **0.10.3 test**（GitHub Pre-release，标签 `v0.10.3`），尚无 stable。
+当前仅发布 **0.10.4 test**（GitHub Pre-release，标签 `v0.10.4`），尚无 stable。
 下面入口固定安装该 test，不跟随 main 的未发布代码。普通 `install.sh` 在没有 stable 时明确退出，不会偷偷安装 test。
 
 <!-- bootstrap:start -->
@@ -43,7 +43,7 @@ llmsm_bootstrap=$(mktemp)
 trap 'rm -f "$llmsm_bootstrap"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
-curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.3/test/install.sh -o "$llmsm_bootstrap"
+curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.4/test/install.sh -o "$llmsm_bootstrap"
 sh "$llmsm_bootstrap"
 LLMSM_BOOTSTRAP
 ```
@@ -52,7 +52,7 @@ LLMSM_BOOTSTRAP
 已有 curl 的机器可使用短命令（与上面的入口调用同一个安装器）：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.3/test/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.4/test/install.sh | sh
 ```
 
 安装完成后运行 `llmsm`。安装器只安装管理工具及其运行依赖，不安装推理底座、下载模型或启动模型服务。
@@ -197,13 +197,17 @@ Ollama 检查 size_vram，llama.cpp 检查全层 GPU 加载日志。错误或中
 工具不修改 sudoers、登录身份、全局 memlock 或客户端设置，不调用外层虚拟化接口。
 服务启动目标由工具独占管理；不要同时用其它工具覆盖服务配置。
 
+原生配置命名沿用底座程序名称；需要区分本地配置时，统一追加 `-local`（扩展名前）。
+官方 `ollama.service` 保持原名，模型 API 名称保持上游名称。工具自身的目录、审计标识和内部目录 ID 不属于模型名称。
+升级后首次应用配置会在同一事务中停用旧服务、迁移旧配置和自启设置；失败可恢复旧名称。若新旧配置同时存在或旧服务不属于本工具，会拒绝覆盖并提示处理。历史日志保留。
+
 原生配置路径：
 
-* /etc/systemd/system/llm-llama.service
-* /etc/systemd/system/ollama.service.d/llm.conf
-* /etc/ollama/llmsm.Modelfile
-* /etc/strata/llmsm.json
-* /etc/systemd/system/llm-strata.service
+* /etc/systemd/system/llama-server-local.service
+* /etc/systemd/system/ollama.service.d/ollama-local.conf
+* /etc/ollama/ollama-local.Modelfile
+* /etc/strata/strata-local.json
+* /etc/systemd/system/strata-local.service
 
 ## 测试
 
@@ -211,6 +215,7 @@ Ollama 检查 size_vram，llama.cpp 检查全层 GPU 加载日志。错误或中
 
 保留配置映射、事务提交/恢复及终端交互测试；安装下载不作端到端自动测试。
 配置/切换/停止回归覆盖缺失底座、损坏配置、文件写入失败、启动回滚、停止失败及自启。
+Ollama 离线模型检查兼容官方 `manifests` 和 `manifests-v2`、清单软链接及多 runner 清单；菜单、安装状态与启动检查共用同一读取逻辑，不修改模型存储。
 本机验收日志和模型路径不放入公开项目，部署和测试记录保存在项目目录之外。
 
 ## 删除工具不会删除服务配置
@@ -218,7 +223,7 @@ Ollama 检查 size_vram，llama.cpp 检查全层 GPU 加载日志。错误或中
 程序 `/opt/llm-service-manager`、入口 `/usr/local/bin/llmsm`、工具元数据
 `/etc/llm-service-manager` 和 `/var/lib/llm-service-manager` 均不在底座运行依赖链上。
 底座需要保留的是操作结果：其官方程序、模型文件、systemd 单元及独立的原生配置：
-`/etc/strata/llmsm.json`、`/etc/ollama/llmsm.Modelfile`、Ollama service drop-in。
+`/etc/strata/strata-local.json`、`/etc/ollama/ollama-local.Modelfile`、Ollama service drop-in。
 模型服务日志位于底座的目录，不放在工具操作记录目录。
 删除这些原生配置当然会影响服务；它们与删除管理工具是两件事。
 
@@ -286,7 +291,7 @@ Linux 能绑定不等于 Windows 同号端口可用，也不代表局域网已�
 随项目提供 [`scripts/windows-lan.ps1`](scripts/windows-lan.ps1)。在普通 Windows PowerShell 执行下面一行；脚本列出发行版供选择，端口默认 55555，可交互修改：
 
 ```powershell
-irm 'https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.3/scripts/windows-bootstrap.ps1' | iex
+irm 'https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.4/scripts/windows-bootstrap.ps1' | iex
 ```
 
 启动先检查 WSL 和微软原生 Sudo for Windows（Inline 模式）；未启用或模式不对时，明确提示在管理员 PowerShell 运行 `sudo config --enable normal`，再回到普通窗口重新运行；缺少组件和系统策略限制分别说明。没有备用提权实现，不自动启用 sudo，也不安装第三方工具。

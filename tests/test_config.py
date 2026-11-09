@@ -69,18 +69,20 @@ class ConfigTests(unittest.TestCase):
             c["settings"]["context"]["value"] = context
             c["settings"]["reserve_mib"]["value"] = 4096
             files = native(c, lambda p: json.dumps(STRATA))
-            s = json.loads(files["/etc/strata/llmsm.json"])
+            s = json.loads(files["/etc/strata/strata-local.json"])
             args = s["args"]
             self.assertEqual(args[args.index("--max-context") + 1], str(context))
             self.assertEqual(args[args.index("--kv") + 1], "int8")
-            self.assertIn(f"num_ctx {context}", files["/etc/ollama/llmsm.Modelfile"])
+            self.assertIn(
+                f"num_ctx {context}", files["/etc/ollama/ollama-local.Modelfile"]
+            )
             self.assertIn(
                 f'"--ctx-size" "{context}"',
-                files["/etc/systemd/system/llm-llama.service"],
+                files["/etc/systemd/system/llama-server-local.service"],
             )
             self.assertIn(
                 "OLLAMA_GPU_OVERHEAD=4294967296",
-                files["/etc/systemd/system/ollama.service.d/llm.conf"],
+                files["/etc/systemd/system/ollama.service.d/ollama-local.conf"],
             )
             self.assertEqual(s["idle_unload_s"], 300)
             self.assertTrue(s["vision"]["gpu"])
@@ -91,7 +93,7 @@ class ConfigTests(unittest.TestCase):
         c["settings"]["reserve_mib"]["value"] = 4096
         old = dict(STRATA, user_args=["--vram-reserve-mib", "0"])
         f = native(c, lambda p: json.dumps(old))
-        s = json.loads(f["/etc/strata/llmsm.json"])
+        s = json.loads(f["/etc/strata/strata-local.json"])
         self.assertEqual(s["user_args"], [])
         self.assertEqual(s["args"][s["args"].index("--vram-reserve-mib") + 1], "4096")
 
@@ -100,12 +102,16 @@ class ConfigTests(unittest.TestCase):
         c["settings"]["idle_seconds"]["value"] = 0
         f = native(c, lambda p: json.dumps(STRATA))
         self.assertIn(
-            "OLLAMA_KEEP_ALIVE=-1", f["/etc/systemd/system/ollama.service.d/llm.conf"]
+            "OLLAMA_KEEP_ALIVE=-1",
+            f["/etc/systemd/system/ollama.service.d/ollama-local.conf"],
         )
         self.assertIn(
-            '"--sleep-idle-seconds" "-1"', f["/etc/systemd/system/llm-llama.service"]
+            '"--sleep-idle-seconds" "-1"',
+            f["/etc/systemd/system/llama-server-local.service"],
         )
-        self.assertEqual(json.loads(f["/etc/strata/llmsm.json"])["idle_unload_s"], 0)
+        self.assertEqual(
+            json.loads(f["/etc/strata/strata-local.json"])["idle_unload_s"], 0
+        )
 
     def test_applicability_and_fixed_gpu(self):
         c = fixture()
@@ -131,10 +137,12 @@ class ConfigTests(unittest.TestCase):
         c["settings"]["mtp"]["value"] = False
         c["settings"]["vision"]["value"] = False
         f = native(c, lambda p: json.dumps(STRATA))
-        s = json.loads(f["/etc/strata/llmsm.json"])
+        s = json.loads(f["/etc/strata/strata-local.json"])
         self.assertNotIn("vision", s)
         self.assertNotIn("--mtp", s["args"])
-        self.assertNotIn("--mmproj", f["/etc/systemd/system/llm-llama.service"])
+        self.assertNotIn(
+            "--mmproj", f["/etc/systemd/system/llama-server-local.service"]
+        )
 
     def test_migration_no_overrides(self):
         c = normalized(
@@ -153,10 +161,10 @@ class ConfigTests(unittest.TestCase):
         f = native(c, lambda p: json.dumps(STRATA))
         self.assertIn(
             "WorkingDirectory=/srv/model-user\n",
-            f["/etc/systemd/system/llm-llama.service"],
+            f["/etc/systemd/system/llama-server-local.service"],
         )
         self.assertNotIn(
-            'WorkingDirectory="', f["/etc/systemd/system/llm-llama.service"]
+            'WorkingDirectory="', f["/etc/systemd/system/llama-server-local.service"]
         )
 
     def test_rollback_revalidates_previous_model(self):
@@ -165,12 +173,18 @@ class ConfigTests(unittest.TestCase):
             ops = manager.Ops(tmp)
             with (
                 patch.object(services, "read_config", return_value=c),
+                patch.object(services.Path, "exists", return_value=False),
                 patch.object(ops, "wait_ready"),
                 patch.object(ops, "ready") as ready,
                 patch.object(ops, "run"),
             ):
                 ops.restored({"active": ["ollama.service"]})
-                ready.assert_called_once_with(c, "ollama")
+                ready.assert_called_once_with(
+                    c,
+                    "ollama",
+                    unit="ollama.service",
+                    modelfile=services.OLLAMA_MODELFILE,
+                )
 
     def test_boot_target_and_restore(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -181,7 +195,7 @@ class ConfigTests(unittest.TestCase):
             ):
                 ops.boot_target("strata")
                 self.assertIn(
-                    unittest.mock.call(["systemctl", "enable", "llm-strata.service"]),
+                    unittest.mock.call(["systemctl", "enable", "strata-local.service"]),
                     run.call_args_list,
                 )
                 self.assertIn(
@@ -193,7 +207,7 @@ class ConfigTests(unittest.TestCase):
                     {
                         "enabled": {
                             "ollama.service": "enabled",
-                            "llm-llama.service": "disabled",
+                            "llama-server-local.service": "disabled",
                         }
                     }
                 )
@@ -202,7 +216,9 @@ class ConfigTests(unittest.TestCase):
                     run.call_args_list,
                 )
                 self.assertIn(
-                    unittest.mock.call(["systemctl", "disable", "llm-strata.service"]),
+                    unittest.mock.call(
+                        ["systemctl", "disable", "strata-local.service"]
+                    ),
                     run.call_args_list,
                 )
 
@@ -222,7 +238,9 @@ class ConfigTests(unittest.TestCase):
         c = fixture()
         c["catalog"][1]["path"] = "/models/space $x %n.gguf"
         f = native(c, lambda p: json.dumps(STRATA))
-        self.assertIn("space $$x %%n.gguf", f["/etc/systemd/system/llm-llama.service"])
+        self.assertIn(
+            "space $$x %%n.gguf", f["/etc/systemd/system/llama-server-local.service"]
+        )
 
     def test_injection_rejected(self):
         c = fixture()
@@ -359,7 +377,7 @@ class Transactions(unittest.TestCase):
                     self.assertEqual(
                         value(json.loads(config.read_text()), "context"), 262144
                     )
-                    self.assertEqual(ops.running, ["llm-llama.service"])
+                    self.assertEqual(ops.running, ["llama-server-local.service"])
                     self.assertEqual(unit.read_text(), "new-unit")
             self.assertFalse((ops.state / "pending.json").exists())
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from .artifacts import embedded_mtp, ollama_manifest
 from .availability import available_backends
 from .model_names import normalize_names
+from .ollama_store import sources as ollama_sources
 from .paths import hf_cache, ollama_roots, strata_install
 
 
@@ -83,17 +84,10 @@ def discover(c):
     sources = {m.get("source") for m in c["catalog"]}
     for root in roots:
         try:
-            files = sorted(p for p in (root / "manifests").rglob("*") if p.is_file())
+            names = ollama_sources(root)
         except PermissionError:
             continue
-        for p in files:
-            relative = p.relative_to(root / "manifests").parts
-            if len(relative) < 3:
-                continue
-            source = "/".join(relative[:-1]) + ":" + relative[-1]
-            source = source.removeprefix("registry.ollama.ai/library/").removeprefix(
-                "registry.ollama.ai/"
-            )
+        for source in names:
             if source in sources:
                 continue
             ident = "ollama-" + hashlib.sha256(source.encode()).hexdigest()[:10]

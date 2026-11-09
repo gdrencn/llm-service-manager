@@ -1,3 +1,3 @@
 """Independent, disposable local model service administration tool."""
 
-__version__ = "0.10.3"
+__version__ = "0.10.4"

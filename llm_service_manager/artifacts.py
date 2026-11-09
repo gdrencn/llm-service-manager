@@ -1,10 +1,13 @@
 """Bounded, read-only model artifact inspection shared by every inventory."""
 
-import json
 import os
 import re
 import struct
 from pathlib import Path
+
+from .ollama_store import complete_ollama as complete_ollama
+from .ollama_store import manifest_relative as manifest_relative
+from .ollama_store import ollama_manifest as ollama_manifest
 
 
 def nonempty(path):
@@ -106,53 +109,6 @@ def gguf_set(path):
             for i in range(1, int(m[2]) + 1)
         )
     )
-
-
-def manifest_relative(name):
-    # A registry may contain a port; only a colon after the final slash denotes a tag.
-    slash = name.rfind("/")
-    colon = name.rfind(":")
-    base, tag = (name[:colon], name[colon + 1 :]) if colon > slash else (name, "latest")
-    parts = base.split("/")
-    if len(parts) == 1:
-        parts = ["registry.ollama.ai", "library", *parts]
-    elif not ("." in parts[0] or ":" in parts[0] or parts[0] == "localhost"):
-        parts = ["registry.ollama.ai", *parts]
-    return Path(*parts) / tag
-
-
-def ollama_manifest(root, source):
-    """Validate metadata and every referenced blob without loading or hashing weights."""
-    root = Path(root)
-    manifest = json.loads((root / "manifests" / manifest_relative(source)).read_text())
-    if (
-        not isinstance(manifest, dict)
-        or not isinstance(manifest.get("layers"), list)
-        or not manifest["layers"]
-    ):
-        raise ValueError("manifest 缺少模型层")
-    for layer in [manifest.get("config"), *manifest["layers"]]:
-        if not isinstance(layer, dict):
-            raise ValueError("manifest 层格式无效")
-        digest, size = layer.get("digest"), layer.get("size")
-        if not isinstance(digest, str) or not re.fullmatch(
-            r"sha256:[0-9a-f]{64}", digest
-        ):
-            raise ValueError("manifest digest 无效")
-        if type(size) is not int or size <= 0:
-            raise ValueError("manifest blob 大小无效")
-        blob = root / "blobs" / digest.replace(":", "-")
-        if not blob.is_file() or blob.stat().st_size != size:
-            raise ValueError("模型 blob 缺失或大小不符：" + str(blob))
-    return manifest
-
-
-def complete_ollama(root, source):
-    try:
-        ollama_manifest(root, source)
-        return True
-    except (OSError, ValueError, TypeError):
-        return False
 
 
 def strata_assets(cfg, vision=True, mtp=True):

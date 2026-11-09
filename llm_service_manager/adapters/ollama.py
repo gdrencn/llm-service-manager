@@ -3,7 +3,7 @@
 import re
 
 from ..config import Error, address, model, value
-from ..paths import OLLAMA_DROPIN, OLLAMA_MODELFILE
+from ..paths import OLLAMA_DROPIN, OLLAMA_MODELFILE, UNITS
 from .common import unit_quote
 
 
@@ -28,7 +28,9 @@ def render(c, read):
         "OLLAMA_GPU_OVERHEAD": v("reserve_mib") * 1024 * 1024,
     }
     out[OLLAMA_DROPIN] = (
-        "# Managed by llmsm\n[Unit]\nConflicts=llm-llama.service llm-strata.service\n[Service]\n"
+        "# Managed by llmsm\n[Unit]\nConflicts="
+        + " ".join(u for backend, u in UNITS.items() if backend != b)
+        + "\n[Service]\n"
         + "".join(
             "Environment=" + unit_quote(k + "=" + str(x), expand_dollar=False) + "\n"
             for k, x in env.items()
