@@ -160,7 +160,7 @@ class HardeningTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             ops = manager.Ops(tmp)
             c = fixture()
-            tag = "llmsm-selected"
+            tag = "qwen3.8:latest"
             responses = [
                 {},
                 {},
@@ -188,7 +188,7 @@ class HardeningTests(unittest.TestCase):
                         {},
                         {
                             "models": [
-                                {"name": "llmsm-selected", "size": 100, "size_vram": 99}
+                                {"name": "qwen3.8:latest", "size": 100, "size_vram": 99}
                             ]
                         },
                     ],

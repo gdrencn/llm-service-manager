@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from ..config import model, value
+from ..model_names import public_name
 from .common import service
 
 
@@ -21,7 +22,7 @@ def render(c, read):
         "--model",
         m["path"],
         "--alias",
-        m["id"],
+        public_name(m),
         "--host",
         v("host"),
         "--port",

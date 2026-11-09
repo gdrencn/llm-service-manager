@@ -100,7 +100,9 @@ def normalized(raw, home=None, user=None):
         c["model_selection"].setdefault(b, ident)
     c.pop("notes", None)
     c.setdefault("target", None)
-    return c
+    from .model_names import normalize_names
+
+    return normalize_names(c)
 
 
 def model(c, b, ident=None):
@@ -188,11 +190,6 @@ def validate(c, backend=None):
             ):
                 raise Error("模型文件必须为绝对路径：" + key)
         if m["backend"] == "ollama":
-            served = m.get("served", "llmsm-selected")
-            if not isinstance(served, str) or not re.fullmatch(
-                r"[A-Za-z0-9][A-Za-z0-9_.:/-]*", served
-            ):
-                raise Error("Ollama派生模型名称无效")
             source = m.get("source", "")
             if (
                 not isinstance(source, str)

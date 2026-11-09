@@ -7,6 +7,7 @@ from pathlib import Path
 from .availability import program
 from .config import Error, address, model, value
 from .execution import Operations
+from .model_names import public_name
 from .network import check_bind
 from .paths import CONFIG, OLLAMA_MODELFILE, STRATA_CONFIG, UNITS
 from .storage import read_config
@@ -136,7 +137,7 @@ class Services(Operations):
                 "OLLAMA_HOST=" + address(value(c, "host"), value(c, "port"), True),
                 executable,
                 "create",
-                model(c, "ollama").get("served", "llmsm-selected"),
+                public_name(model(c, "ollama")),
                 "-f",
                 OLLAMA_MODELFILE,
             ],
@@ -149,7 +150,7 @@ class Services(Operations):
         m = model(c, b)
         if b == "ollama":
             self.create_ollama_model(c)
-            tag = m.get("served", "llmsm-selected")
+            tag = public_name(m)
             request = {
                 "model": tag,
                 "stream": False,

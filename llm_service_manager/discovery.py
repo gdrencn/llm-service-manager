@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .artifacts import embedded_mtp, ollama_manifest
 from .availability import available_backends
+from .model_names import normalize_names
 from .paths import hf_cache, ollama_roots, strata_install
 
 
@@ -93,9 +94,7 @@ def discover(c):
             source = source.removeprefix("registry.ollama.ai/library/").removeprefix(
                 "registry.ollama.ai/"
             )
-            if source in sources or source.startswith(
-                ("llmsm-selected:", "llm-config-selected:", "qwen3.8-local:")
-            ):
+            if source in sources:
                 continue
             ident = "ollama-" + hashlib.sha256(source.encode()).hexdigest()[:10]
             mtp = False
@@ -117,10 +116,9 @@ def discover(c):
                     "backend": "ollama",
                     "name": source,
                     "source": source,
-                    "served": "llmsm-selected",
                     "mtp_supported": mtp,
                 }
             )
             sources.add(source)
             c["model_selection"].setdefault("ollama", ident)
-    return c
+    return normalize_names(c)
