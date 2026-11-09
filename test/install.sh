@@ -3,7 +3,7 @@
 set -eu
 [ "$(uname -s)" = Linux ] || { echo 'Linux is required.' >&2; exit 1; }
 LLMSM_REPOSITORY=${LLMSM_REPOSITORY:-gdrencn/llm-service-manager}
-LLMSM_REF=${LLMSM_REF:-v0.10.1}
+LLMSM_REF=${LLMSM_REF:-v0.10.2}
 [ -n "$LLMSM_REF" ] || { echo "No stable release is available yet. Use the explicitly labelled test installer." >&2; exit 1; }
 llmsm_user=${LLMSM_USER:-${SUDO_USER:-$(id -un)}}
 id "$llmsm_user" >/dev/null 2>&1 || { echo 'LLMSM_USER must identify an existing account.' >&2; exit 1; }

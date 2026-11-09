@@ -1,4 +1,4 @@
-# llm-service-manager 0.10.1 test
+# llm-service-manager 0.10.2 test
 
 独立开发的 Linux/systemd 本地模型服务管理工具。管理 Ollama、llama.cpp 和 Strata，
 一份共享配置，任一时间仅运行一个底座。仅管理服务端底座及模型。
@@ -8,7 +8,7 @@
 支持 apt/dnf 系 Linux（如 Ubuntu 22.04+、Debian 12+、较新的 Fedora），Python 3.10+。
 目标是全新机器：不要求预装 Python、sudo、curl、模型或底座。下面是一段可整体粘贴执行的入口命令，
 缺 curl/CA 证书时先通过系统包管理器补齐，再获取安装器。安装器自动补齐其余工具依赖。
-当前仅发布 **0.10.1 test**（GitHub Pre-release，标签 `v0.10.1`），尚无 stable。
+当前仅发布 **0.10.2 test**（GitHub Pre-release，标签 `v0.10.2`），尚无 stable。
 下面入口固定安装该 test，不跟随 main 的未发布代码。普通 `install.sh` 在没有 stable 时明确退出，不会偷偷安装 test。
 
 <!-- bootstrap:start -->
@@ -43,7 +43,7 @@ llmsm_bootstrap=$(mktemp)
 trap 'rm -f "$llmsm_bootstrap"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
-curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.1/test/install.sh -o "$llmsm_bootstrap"
+curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.2/test/install.sh -o "$llmsm_bootstrap"
 sh "$llmsm_bootstrap"
 LLMSM_BOOTSTRAP
 ```
@@ -52,7 +52,7 @@ LLMSM_BOOTSTRAP
 已有 curl 的机器可使用短命令（与上面的入口调用同一个安装器）：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.1/test/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.2/test/install.sh | sh
 ```
 
 安装完成后运行 `llmsm`。安装器只安装管理工具及其运行依赖，不安装推理底座、下载模型或启动模型服务。
@@ -286,7 +286,7 @@ Linux 能绑定不等于 Windows 同号端口可用，也不代表局域网已�
 随项目提供 [`scripts/windows-lan.ps1`](scripts/windows-lan.ps1)。在普通 Windows PowerShell 执行下面一行；脚本列出发行版供选择，端口默认 55555，可交互修改：
 
 ```powershell
-irm 'https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.1/scripts/windows-bootstrap.ps1' | iex
+irm 'https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.2/scripts/windows-bootstrap.ps1' | iex
 ```
 
 启动先检查 WSL 和微软原生 Sudo for Windows（Inline 模式）；未启用或模式不对时，明确提示在管理员 PowerShell 运行 `sudo config --enable normal`，再回到普通窗口重新运行；缺少组件和系统策略限制分别说明。没有备用提权实现，不自动启用 sudo，也不安装第三方工具。
@@ -295,7 +295,7 @@ WSL 信息在原 Windows 用户身份下读取；管理员子进程只配置 Win
 使用 Windows 自带的 PowerShell 5.1、WSL、IP Helper、`netsh interface portproxy` 和 NetSecurity。
 先检查 NAT、Linux 服务可达性、专用网络、端口占用/保留范围，再配置对应转发和具名防火墙规则。
 仅开放 Private + LocalSubnet，不修改其它规则或网络类别；未设置为专用网络时提示用户先确认可信网络。
-若通过另一个管理员账号提权，也不会尝试在那个账号下查找所选 WSL。
+运行账户须能通过 UAC 获得管理员权限；脚本不会授予账户权限。
 
 可下载脚本后加 `-CheckOnly` 查看检查结果与拟执行操作，不写入网络配置（仍通过 sudo 完成需要权限的只读检查）。
 执行失败即停止；已完成的原生配置保留，可修复原因后重跑。不会建立计划任务、后台进程，也不会修改机器级执行策略。
@@ -305,7 +305,30 @@ Linux 自动配置仅使用发行版包管理器，不运行底座安装器或�
 
 依据：[Ubuntu 防火墙](https://documentation.ubuntu.com/security/security-features/network/firewall/)、
 [firewalld 开放端口](https://firewalld.org/documentation/howto/open-a-port-or-service)、
-[PowerShell RunAs](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-process)。
+[Sudo for Windows](https://learn.microsoft.com/en-us/windows/advanced-settings/sudo/)。
+
+### 全新 Windows 的依赖边界
+
+以 Windows 11 24H2+、已有 WSL2 为支持范围；WSL2 本身不代表系统必定有原生 sudo。
+只使用 Windows 自带的 Windows PowerShell 5.1/.NET、sudo、wsl、netsh、NetTCPIP、NetSecurity 和系统服务。
+不需要 PowerShell 7、Python、Git、Node.js、OpenSSL、第三方防火墙或提权工具。
+
+- 启动检查原生 sudo 是否存在、是否启用 Inline、是否受策略限制，以及所需系统网络命令是否存在；缺失时给出具体修复步骤。
+- 不假设已有专用网络、防火墙已启用、服务已运行或端口空闲。实际检查后才写入目标配置；公共网络和关闭的防火墙需要用户先确认/恢复，不全局修改系统策略。
+- 局域网只要求专用网络有 IPv4，不强制存在默认网关；隔离局域网也可使用。
+- Linux 端需现代 WSL 提供的 `wslinfo`、发行版标准 `ip` 命令、可用 IPv4 路由和已启动的模型服务。缺少工具时分别提示更新 WSL 或在 Linux 安装 iproute2/iproute，不依赖用户此前安装过其它软件。
+- 获取脚本需要能够通过 HTTPS 访问 GitHub；系统策略、网络或代理限制不会被脚本绕过。
+
+缺失组件、未启用 sudo、模式错误、策略限制、公共网络、关闭防火墙、停止服务、缺少 Linux 工具等分支有模拟回归测试；这不等同于已完成全新 Windows 虚拟机验收。
+
+### HTTP 与 HTTPS
+
+当前底座端点使用 HTTP，Windows portproxy 仅转发 TCP，不提供 TLS。HTTP 是底座常见的原生接口方式，但不会加密请求、图片、回答或 API key。
+Private/LocalSubnet 防火墙范围也不是加密或身份认证。公网及不可信网络应单独配置 HTTPS 和访问认证。
+HTTPS 需要受客户端信任、与访问域名/IP 匹配的证书，以及底座 TLS 支持或标准反向代理；当前脚本不自动安装代理或签发证书。
+
+参考：[Ollama HTTP server](https://docs.ollama.com/faq#how-can-i-use-ollama-with-a-proxy-server)、
+[llama.cpp SSL](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md#build-with-ssl)。
 
 ## 发布渠道
 

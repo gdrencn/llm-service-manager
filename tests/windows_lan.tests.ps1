@@ -24,12 +24,16 @@ function Invoke-Native([string]$Program, [string[]]$Arguments) {
     if ($cmd -match 'portproxy (add|set)') { $script:changes++; $script:proxyText = '0.0.0.0 55555 172.28.1.2 55555'; return 'OK' }
     throw "Unexpected native command $cmd"
 }
-function Get-NetConnectionProfile { [pscustomobject]@{NetworkCategory='Private';InterfaceIndex=4} }
-function Get-NetIPConfiguration { [pscustomobject]@{IPv4DefaultGateway='192.168.1.1';InterfaceIndex=4;IPv4Address=@([pscustomobject]@{IPAddress='192.168.1.20'})} }
+function Get-NetConnectionProfile { [pscustomobject]@{NetworkCategory=$(if ($script:privateProfile) {'Private'} else {'Public'});InterfaceIndex=4} }
+function Get-NetIPConfiguration { [pscustomobject]@{IPv4DefaultGateway=$null;InterfaceIndex=4;IPv4Address=@([pscustomobject]@{IPAddress='192.168.1.20'})} }
 function Test-NetConnection { return $script:reachable }
 function Get-NetFirewallRule { return $script:fw }
 function Get-NetTCPConnection { if ($script:busy) { [pscustomobject]@{LocalPort=55555} } }
-function Get-Service { [pscustomobject]@{Status='Running';StartType='Automatic'} }
+$script:firewallEnabled = $true
+$script:serviceState = 'Running'
+$script:privateProfile = $true
+function Get-NetFirewallProfile { [pscustomobject]@{Enabled=$script:firewallEnabled} }
+function Get-Service { [pscustomobject]@{Status=$script:serviceState;StartType='Automatic'} }
 function Start-Service { $script:changes++ }
 function New-NetFirewallRule {
     $script:changes++
@@ -51,6 +55,9 @@ Invoke-LanSetup 'test' 55555 $false '172.28.1.2'
 Assert ($script:changes -eq 2) 'Expected exactly one native proxy and firewall write'
 Invoke-LanSetup 'test' 55555 $false '172.28.1.2'
 Assert ($script:changes -eq 4) 'Rerun failed to update native configuration'
+$script:firewallEnabled = $false; Expect-Failure '*Private network firewall is disabled*'; $script:firewallEnabled = $true
+$script:serviceState = 'Stopped'; Expect-Failure '*not running*'; $script:serviceState = 'Running'
+$script:privateProfile = $false; Expect-Failure '*choose Private*'; $script:privateProfile = $true
 $script:mode = 'mirrored'
 try { Resolve-WslTarget 'test' 55555; throw 'Expected NAT failure' } catch { if ($_.Exception.Message -notlike '*Expected NAT*') { throw } }
 $script:mode = 'nat'
@@ -72,6 +79,13 @@ $script:answers.Enqueue(''); $script:answers.Enqueue('')
 $selected = Select-Target
 Assert ($selected.distro -eq 'Ubuntu' -and $selected.port -eq 55555) 'Defaults failed'
 try { Assert-Target '<placeholder>' 55555 '172.28.1.2'; throw 'Expected invalid target' } catch { if ($_.Exception.Message -notlike '*Invalid distribution*') { throw } }
+# Missing WSL-side tools give explicit next steps without installing Windows extras.
+$savedNative = ${function:Invoke-Native}
+function Invoke-Native { throw 'command missing' }
+try { Resolve-WslTarget 'test' 55555; throw 'Expected WSL guidance' } catch { if ($_.Exception.Message -notlike '*wsl --update*') { throw } }
+function Invoke-Native([string]$Program, [string[]]$Arguments) { if ($Arguments -contains 'wslinfo') { return 'nat' }; throw 'ip missing' }
+try { Resolve-WslTarget 'test' 55555; throw 'Expected ip guidance' } catch { if ($_.Exception.Message -notlike '*iproute2*iproute*') { throw } }
+${function:Invoke-Native} = $savedNative
 # The Windows-only worker never tries to enter WSL after changing identity.
 function Invoke-Native([string]$Program, [string[]]$Arguments) { if ($Program -eq 'wsl.exe') { throw 'Worker must not access WSL' }; if (($Arguments -join ' ') -like '*portproxy show*') { return '' }; return '' }
 $script:fw = @(); Invoke-LanSetup 'test' 55555 $true '172.28.1.2'
@@ -119,3 +133,8 @@ try { Invoke-Setup $false 'test.ps1'; throw 'Expected elevation failure' }
 catch { if ($_.Exception.Message -notlike '*Configuration failed*') { throw } }
 Assert ($script:sudoCalls -eq 2) 'Failed elevation was retried'
 Write-Host 'WINDOWS_MOCK_REGRESSIONS_PASSED'
+
+# Missing Windows built-in module must be diagnosed before any network mutation.
+function Get-Command([string]$Name) { if ($Name -eq 'Get-NetFirewallProfile') { return $null }; return @{Name=$Name} }
+try { Require-Environment; throw 'Expected missing component' } catch { if ($_.Exception.Message -notlike '*Get-NetFirewallProfile*NetTCPIP/NetSecurity*') { throw } }
+Write-Host 'FRESH_WINDOWS_REQUIREMENTS_PASSED'

@@ -59,9 +59,11 @@ function Select-Target {
 
 function Resolve-WslTarget([string]$Distribution, [int]$ServicePort) {
     Write-Step '[1/6] Check WSL networking' 'Read the selected distribution as the original Windows user, before elevation.'
-    $mode = (Invoke-Native 'wsl.exe' @('-d', $Distribution, '--cd', '/', '--exec', 'wslinfo', '--networking-mode')).Trim()
+    try { $mode = (Invoke-Native 'wsl.exe' @('-d', $Distribution, '--cd', '/', '--exec', 'wslinfo', '--networking-mode')).Trim() }
+    catch { throw ("Cannot query WSL networking. Confirm the selected distribution uses WSL2 (wsl --list --verbose) and update WSL (wsl --update), then retry. Details: " + $_.Exception.Message) }
     if ($mode -ne 'nat') { throw "Expected NAT, got '$mode'. No forwarding configured." }
-    $routeText = Invoke-Native 'wsl.exe' @('-d', $Distribution, '--cd', '/', '--exec', 'ip', '-j', '-4', 'route', 'get', '1.1.1.1')
+    try { $routeText = Invoke-Native 'wsl.exe' @('-d', $Distribution, '--cd', '/', '--exec', 'ip', '-j', '-4', 'route', 'get', '1.1.1.1') }
+    catch { throw ("Cannot read Linux IPv4 routing. In the selected distribution, ensure networking works and install its standard iproute2 (apt) or iproute (dnf) package if ip is missing. Details: " + $_.Exception.Message) }
     $routes = @($routeText | ConvertFrom-Json)
     if ($routes.Count -eq 0) { throw 'No default IPv4 route in the selected distribution.' }
     $ip = [string]$routes[0].prefsrc
@@ -91,8 +93,13 @@ function Invoke-LanSetup([string]$Distribution, [int]$ServicePort, [bool]$ReadOn
     Write-Step '[2/6] Check the LAN and backend' 'Allow only Private networks and LocalSubnet. Keep existing network profiles unchanged.'
     Write-Host '$ Get-NetConnectionProfile; Get-NetIPConfiguration' -ForegroundColor DarkGray
     $profiles = @(Get-NetConnectionProfile | Where-Object NetworkCategory -eq 'Private')
-    $lan = @(Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and ($profiles.InterfaceIndex -contains $_.InterfaceIndex) })
-    if ($lan.Count -eq 0) { throw 'No Private LAN with an IPv4 gateway. Mark your trusted LAN Private in Windows settings, then rerun.' }
+    $lan = @(Get-NetIPConfiguration | Where-Object { $_.IPv4Address -and ($profiles.InterfaceIndex -contains $_.InterfaceIndex) })
+    if ($lan.Count -eq 0) { throw 'No Private LAN with an IPv4 address. In Windows Settings > Network & internet, open your trusted Ethernet/Wi-Fi connection and choose Private, then rerun.' }
+    Write-Host '$ Get-Service BFE,MpsSvc; Get-NetFirewallProfile -Name Private' -ForegroundColor DarkGray
+    foreach ($service in @('BFE', 'MpsSvc')) {
+        if ((Get-Service $service).Status -ne 'Running') { throw "Windows firewall dependency $service is not running. Restore the built-in Windows firewall services, then rerun; this script does not change system-wide service policy." }
+    }
+    if (-not (Get-NetFirewallProfile -Name Private).Enabled) { throw 'The Private network firewall is disabled. Enable it in Windows Security > Firewall & network protection > Private network, then rerun. Adding a port rule alone would not enforce the requested scope.' }
     Write-Host ('$ Test-NetConnection -ComputerName ' + $ip + ' -Port ' + $ServicePort + ' -InformationLevel Quiet') -ForegroundColor DarkGray
     if (-not (Test-NetConnection -ComputerName $ip -Port $ServicePort -InformationLevel Quiet -WarningAction SilentlyContinue)) {
         throw 'Windows cannot reach the Linux service. Apply the Linux listening/firewall configuration and start the model first.'
@@ -124,7 +131,7 @@ function Invoke-LanSetup([string]$Distribution, [int]$ServicePort, [bool]$ReadOn
     Write-Step '[4/6] Configure native TCP forwarding' 'IP Helper runs the Windows portproxy. The rule persists; rerun this script if WSL gets a new IP.'
     Write-Host '$ Get-Service iphlpsvc' -ForegroundColor DarkGray
     $helper = Get-Service iphlpsvc
-    if ($helper.StartType -eq 'Disabled') { throw 'IP Helper is disabled by system policy. Enable it deliberately before using portproxy.' }
+    if ($helper.StartType -eq 'Disabled') { throw 'IP Helper is disabled. Windows portproxy requires it; restore IP Helper in Windows Services, then rerun.' }
     $verb = if ($existing.Count -gt 0) { 'set' } else { 'add' }
     $args = @('interface', 'portproxy', $verb, 'v4tov4', 'listenaddress=0.0.0.0', "listenport=$ServicePort", "connectaddress=$ip", "connectport=$ServicePort")
     if ($ReadOnly) {
@@ -190,7 +197,16 @@ function Get-InlineSudo {
 
 function Require-Environment {
     $sudo = Get-InlineSudo
-    if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) { throw 'WSL is not installed. Install WSL2 and prepare the Linux model service, then rerun this script.' }
+    $required = @('wsl.exe', 'netsh.exe', 'Get-NetConnectionProfile', 'Get-NetIPConfiguration',
+                  'Test-NetConnection', 'Get-NetTCPConnection', 'Get-NetFirewallRule',
+                  'Get-NetFirewallPortFilter', 'Get-NetFirewallAddressFilter', 'Get-NetFirewallProfile',
+                  'New-NetFirewallRule', 'Set-NetFirewallRule', 'Get-Service', 'Start-Service')
+    foreach ($name in $required) {
+        if (-not (Get-Command $name -ErrorAction SilentlyContinue)) {
+            if ($name -eq 'wsl.exe') { throw 'WSL is not installed. Install WSL2 and prepare the Linux model service, then rerun this script.' }
+            throw "Required Windows built-in command is unavailable: $name. Use Windows PowerShell 5.1 and restore the built-in NetTCPIP/NetSecurity components if missing; no third-party package is required."
+        }
+    }
     return $sudo
 }
 
