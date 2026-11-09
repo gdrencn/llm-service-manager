@@ -29,7 +29,8 @@ def render(c, read):
         "--port",
         str(v("port")),
         "--ctx-size",
-        str(v("context")),
+        # llama.cpp divides this pool between explicitly configured slots.
+        str(v("context") * v("parallel")),
         "--parallel",
         str(v("parallel")),
         "--cache-type-k",

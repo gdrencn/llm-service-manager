@@ -12,7 +12,7 @@ from .config import Error, normalized, validate
 from .paths import CONFIG, STATE
 
 
-def atomic(path, data):
+def atomic(path, data, *, metadata=None):
     path = Path(path)
     if path.is_symlink():
         raise Error("拒绝覆盖符号链接配置：" + str(path))
@@ -22,13 +22,18 @@ def atomic(path, data):
         with os.fdopen(fd, "wb") as f:
             f.write(data if isinstance(data, bytes) else data.encode())
             f.flush()
+            attributes = metadata
+            if attributes is None and path.exists():
+                st = path.stat()
+                attributes = {
+                    "mode": st.st_mode & 0o7777,
+                    "uid": st.st_uid,
+                    "gid": st.st_gid,
+                }
+            if attributes:
+                os.fchown(f.fileno(), attributes["uid"], attributes["gid"])
+            os.fchmod(f.fileno(), attributes["mode"] if attributes else 0o644)
             os.fsync(f.fileno())
-            os.fchmod(
-                f.fileno(), path.stat().st_mode & 0o777 if path.exists() else 0o644
-            )
-        if path.exists():
-            st = path.stat()
-            os.chown(name, st.st_uid, st.st_gid)
         os.replace(name, path)
         directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:

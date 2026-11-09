@@ -24,6 +24,9 @@ def normalize_names(config):
         if not isinstance(entry, dict):
             continue
         backend = entry.get("backend")
+        if not isinstance(backend, str):
+            # Schema validation reports malformed entries; normalization must not crash first.
+            continue
         field = {"llama.cpp": "path", "ollama": "source"}.get(backend)
         if field and isinstance(entry.get(field), str) and entry[field]:
             entry["name"] = public_name(entry)

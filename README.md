@@ -1,4 +1,4 @@
-# llm-service-manager 0.10.4 test
+# llm-service-manager 0.10.5 test
 
 独立开发的 Linux/systemd 本地模型服务管理工具。管理 Ollama、llama.cpp 和 Strata，
 一份共享配置，任一时间仅运行一个底座。仅管理服务端底座及模型。
@@ -8,7 +8,7 @@
 支持 apt/dnf 系 Linux（如 Ubuntu 22.04+、Debian 12+、较新的 Fedora），Python 3.10+。
 目标是全新机器：不要求预装 Python、sudo、curl、模型或底座。下面是一段可整体粘贴执行的入口命令，
 缺 curl/CA 证书时先通过系统包管理器补齐，再获取安装器。安装器自动补齐其余工具依赖。
-当前仅发布 **0.10.4 test**（GitHub Pre-release，标签 `v0.10.4`），尚无 stable。
+当前仅发布 **0.10.5 test**（GitHub Pre-release，标签 `v0.10.5`），尚无 stable。
 下面入口固定安装该 test，不跟随 main 的未发布代码。普通 `install.sh` 在没有 stable 时明确退出，不会偷偷安装 test。
 
 <!-- bootstrap:start -->
@@ -43,7 +43,7 @@ llmsm_bootstrap=$(mktemp)
 trap 'rm -f "$llmsm_bootstrap"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
-curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.4/test/install.sh -o "$llmsm_bootstrap"
+curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.5/test/install.sh -o "$llmsm_bootstrap"
 sh "$llmsm_bootstrap"
 LLMSM_BOOTSTRAP
 ```
@@ -52,7 +52,7 @@ LLMSM_BOOTSTRAP
 已有 curl 的机器可使用短命令（与上面的入口调用同一个安装器）：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.4/test/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.5/test/install.sh | sh
 ```
 
 安装完成后运行 `llmsm`。安装器只安装管理工具及其运行依赖，不安装推理底座、下载模型或启动模型服务。
@@ -82,7 +82,7 @@ curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.4
 
 菜单和配置输入共用原地刷新区域，不进入全屏。保留输出采用统一空行、标题及分隔线；分隔线上下各留一个空行。
 产品页标题专用青色加粗；统一加强色为 Codex 默认深色 Markdown 加粗文字所用的 #F38BA8，命令用粉色常规字、内容分段标题用粉色加粗；配置及统计值白色加粗；普通文本白色，说明及不可用项灰色。
-所有菜单和输入框统一使用背景高亮表示当前选择；成功状态采用 #A6E3A1，链接采用 #89B4FA；警告和错误分别为黄、红。
+菜单和按钮使用背景高亮表示选中状态；输入文字使用普通白色、保持终端原背景，仅以粉色细竖线标示插入位置；成功状态采用 #A6E3A1，链接采用 #89B4FA；警告和错误分别为黄、红。
 配置项同时保留可修改、固定、不适用等文字标签，NO_COLOR 可禁用颜色。
 菜单显示时隐藏终端光标；退出、取消或交给外部命令时恢复。文本编辑保留自绘输入位置指示。
 方向键选择，Enter 确认，Esc 返回。文本预填当前值，Ctrl+U 清空。返回/取消总在最后，
@@ -189,7 +189,8 @@ Strata 不再调用内部 Python 模块，不固定其 Python 版本或安装版
 ## 事务与日志
 
 启动前检查模型/分片/视觉/MTP/引擎，应用时为已安装且配置有效的底座生成原生配置，只启动选定服务并检查就绪与加载状态。
-Ollama 检查 size_vram，llama.cpp 检查全层 GPU 加载日志。错误或中断恢复之前配置及服务。
+共享上下文表示每条请求的上下文；llama.cpp 的总上下文池按上下文 × 并发数生成，避免并发增加后每个槽位容量缩水。并发增加会提高资源需求。
+Ollama 检查 size_vram，llama.cpp 检查全层 GPU 加载日志。错误或中断恢复之前配置及服务，包括原文件权限和所有者。
 不自动缩小上下文或降低参数；不保证预检查能预测全部 OOM。恢复不保证保留旧 KV 会话。
 
 命令、文件变更和接口访问记录到 /var/lib/llm-service-manager/audit.jsonl；界面显示简明进度。
@@ -234,15 +235,16 @@ Ollama 离线模型检查兼容官方 `manifests` 和 `manifests-v2`、清单软
 | 模块 | 唯一职责 |
 |---|---|
 | `config.py` / `paths.py` | 共享参数、校验、解析、路径定义 |
-| `storage.py` | 同一快照读取与版本标记、原子写入、锁 |
-| `artifacts.py` | GGUF、分片、manifest、Strata 必需文件检查 |
+| `storage.py` / `transaction.py` | 原子写入、锁、文件内容与权限快照、恢复记录校验 |
+| `artifacts.py` / `ollama_store.py` | GGUF、分片、Strata 文件与 Ollama 新旧存储格式检查 |
 | `availability.py` / `discovery.py` / `inventory.py` | 程序可用性、本地模型发现、安装状态 |
 | `adapters/` | 各底座的官方参数和原生配置渲染，无副作用 |
 | `execution.py` | 命令、文件及 HTTP 操作与审计 |
 | `services.py` | 官方服务生命周期、就绪和 GPU 驻留检查 |
 | `manager.py` | 配置切换事务、提交和失败恢复 |
 | `inline_ui/` / `tui.py` / `presentation.py` / `install_guide.py` / `status.py` | 行内交互、样式和只读展示 |
-| `scripts/` | 从共享模板生成安装入口及 README 命令 |
+| `inline_ui/keyboard.py` | 独立按键解码，不依赖产品或界面布局 |
+| `scripts/` | 生成安装入口；Windows 脚本按检查、配置、验证划分函数 |
 
 ```sh
 python3 -m unittest discover -s tests -q
@@ -291,7 +293,7 @@ Linux 能绑定不等于 Windows 同号端口可用，也不代表局域网已�
 随项目提供 [`scripts/windows-lan.ps1`](scripts/windows-lan.ps1)。在普通 Windows PowerShell 执行下面一行；脚本列出发行版供选择，端口默认 55555，可交互修改：
 
 ```powershell
-irm 'https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.4/scripts/windows-bootstrap.ps1' | iex
+irm 'https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.5/scripts/windows-bootstrap.ps1' | iex
 ```
 
 启动先检查 WSL 和微软原生 Sudo for Windows（Inline 模式）；未启用或模式不对时，明确提示在管理员 PowerShell 运行 `sudo config --enable normal`，再回到普通窗口重新运行；缺少组件和系统策略限制分别说明。没有备用提权实现，不自动启用 sudo，也不安装第三方工具。

@@ -174,7 +174,7 @@ def entry():
     signal.signal(signal.SIGTERM, interrupted)
     try:
         main()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
         print("操作已取消", file=sys.stderr)
         sys.exit(130)
     except (Error, OSError, ValueError, subprocess.SubprocessError) as ex:

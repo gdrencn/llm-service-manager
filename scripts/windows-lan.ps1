@@ -80,16 +80,35 @@ function Assert-Target([string]$Distribution, [int]$ServicePort, [string]$IP) {
 
 function Get-ProxyRows([string]$Text) {
     foreach ($line in $Text -split "`r?`n") {
-        if ($line -match '^\s*(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s*$') {
+        if ($line -match '^\s*(\S+)\s+(\d+)\s+(\S+)\s+(\d+)\s*$') {
             [pscustomobject]@{ Listen = $Matches[1]; Port = [int]$Matches[2]; Target = $Matches[3]; TargetPort = [int]$Matches[4] }
         }
     }
 }
 
-function Invoke-LanSetup([string]$Distribution, [int]$ServicePort, [bool]$ReadOnly, [string]$IP) {
-    # The elevated worker never opens WSL under a different Windows identity.
-    Assert-Target $Distribution $ServicePort $IP
-    $ip = $IP
+function Write-PSCommand([string]$Command, [hashtable]$Parameters) {
+    $parts = @($Command)
+    foreach ($key in @($Parameters.Keys | Sort-Object)) {
+        $parts += '-' + $key
+        $parts += "'" + ([string]$Parameters[$key]).Replace("'", "''") + "'"
+    }
+    Write-Host ('$ ' + ($parts -join ' ')) -ForegroundColor DarkGray
+}
+
+function Test-FirewallTarget($Rules, [int]$Port, [string]$Owner) {
+    $rows = @($Rules)
+    if ($rows.Count -ne 1) { return $false }
+    $rule = $rows[0]
+    if ($rule.Description -ne $Owner -or [string]$rule.Enabled -ne 'True' -or [string]$rule.Direction -ne 'Inbound' -or [string]$rule.Action -ne 'Allow' -or [string]$rule.Profile -ne 'Private') { return $false }
+    Write-Host '$ rule | Get-NetFirewallPortFilter; Get-NetFirewallAddressFilter; Get-NetFirewallApplicationFilter; Get-NetFirewallServiceFilter' -ForegroundColor DarkGray
+    $ports = $rule | Get-NetFirewallPortFilter
+    $address = $rule | Get-NetFirewallAddressFilter
+    $application = $rule | Get-NetFirewallApplicationFilter
+    $service = $rule | Get-NetFirewallServiceFilter
+    return ([string]$ports.Protocol -in @('TCP', '6') -and [string]$ports.LocalPort -eq [string]$Port -and [string]$ports.RemotePort -eq 'Any' -and [string]$address.RemoteAddress -eq 'LocalSubnet' -and [string]$address.LocalAddress -eq 'Any' -and [string]$application.Program -eq 'Any' -and [string]$service.Service -eq 'Any')
+}
+
+function Get-LanInterfaces([int]$ServicePort, [string]$IP) {
     Write-Step '[2/6] Check the LAN and backend' 'Allow only Private networks and LocalSubnet. Keep existing network profiles unchanged.'
     Write-Host '$ Get-NetConnectionProfile; Get-NetIPConfiguration' -ForegroundColor DarkGray
     $profiles = @(Get-NetConnectionProfile | Where-Object NetworkCategory -eq 'Private')
@@ -100,11 +119,15 @@ function Invoke-LanSetup([string]$Distribution, [int]$ServicePort, [bool]$ReadOn
         if ((Get-Service $service).Status -ne 'Running') { throw "Windows firewall dependency $service is not running. Restore the built-in Windows firewall services, then rerun; this script does not change system-wide service policy." }
     }
     if (-not (Get-NetFirewallProfile -Name Private).Enabled) { throw 'The Private network firewall is disabled. Enable it in Windows Security > Firewall & network protection > Private network, then rerun. Adding a port rule alone would not enforce the requested scope.' }
-    Write-Host ('$ Test-NetConnection -ComputerName ' + $ip + ' -Port ' + $ServicePort + ' -InformationLevel Quiet') -ForegroundColor DarkGray
-    if (-not (Test-NetConnection -ComputerName $ip -Port $ServicePort -InformationLevel Quiet -WarningAction SilentlyContinue)) {
+    Write-Host ('$ Test-NetConnection -ComputerName ' + $IP + ' -Port ' + $ServicePort + ' -InformationLevel Quiet') -ForegroundColor DarkGray
+    if (-not (Test-NetConnection -ComputerName $IP -Port $ServicePort -InformationLevel Quiet -WarningAction SilentlyContinue)) {
         throw 'Windows cannot reach the Linux service. Apply the Linux listening/firewall configuration and start the model first.'
     }
 
+    return $lan
+}
+
+function Get-PortState([string]$Distribution, [int]$ServicePort, [string]$IP) {
     Write-Step '[3/6] Check Windows port ownership' 'Do not replace another program or another distribution forwarding rule.'
     $proxy = @(Get-ProxyRows (Invoke-Native 'netsh.exe' @('interface', 'portproxy', 'show', 'v4tov4')))
     $existing = @($proxy | Where-Object { $_.Port -eq $ServicePort })
@@ -112,12 +135,20 @@ function Invoke-LanSetup([string]$Distribution, [int]$ServicePort, [bool]$ReadOn
     # The description is a native rule property, retained without llmsm installed.
     $owner = "WSL NAT: $Distribution"
     Write-Host ('$ Get-NetFirewallRule; Get-NetTCPConnection -State Listen # TCP ' + $ServicePort) -ForegroundColor DarkGray
-    $owned = @(Get-NetFirewallRule | Where-Object Name -eq $name)
+    $owned = @(Get-NetFirewallRule -PolicyStore PersistentStore | Where-Object Name -eq $name)
+    if ($owned.Count -gt 1) { throw "Multiple firewall rules use $name; resolve the duplicate rules before continuing." }
     if ($owned.Count -gt 0 -and @($owned | Where-Object Description -ne $owner).Count -gt 0) {
         throw "Firewall rule $name already exists with another owner; inspect it before continuing."
     }
-    if (@($existing | Where-Object { $_.Listen -ne '0.0.0.0' -or $_.TargetPort -ne $ServicePort -or ($_.Target -ne $ip -and $owned.Count -ne 1) }).Count -gt 0) {
+    if (@($existing | Where-Object { $_.Listen -ne '0.0.0.0' -or $_.TargetPort -ne $ServicePort -or ($_.Target -ne $IP -and $owned.Count -ne 1) }).Count -gt 0) {
         throw 'A different portproxy already uses this port. Choose another port or resolve the conflict manually.'
+    }
+    # Other proxy families may occupy the same Windows port. Never replace them.
+    foreach ($family in @('v4tov6', 'v6tov4', 'v6tov6')) {
+        $other = @(Get-ProxyRows (Invoke-Native 'netsh.exe' @('interface', 'portproxy', 'show', $family)))
+        if (@($other | Where-Object Port -eq $ServicePort).Count -gt 0) {
+            throw "Another portproxy family ($family) uses this port. Resolve the conflict before continuing."
+        }
     }
     $listeners = @(Get-NetTCPConnection -State Listen | Where-Object LocalPort -eq $ServicePort)
     if ($existing.Count -eq 0 -and $listeners.Count -gt 0) { throw 'Windows TCP port is occupied. Change the service port and rerun.' }
@@ -128,40 +159,57 @@ function Invoke-LanSetup([string]$Distribution, [int]$ServicePort, [bool]$ReadOn
         }
     }
 
+    return @{ Existing = $existing; Owned = $owned; Name = $name; Owner = $owner }
+}
+
+function Set-PortForwarding([int]$ServicePort, [string]$IP, [hashtable]$State, [bool]$ReadOnly) {
+    $existing = $State.Existing
     Write-Step '[4/6] Configure native TCP forwarding' 'IP Helper runs the Windows portproxy. The rule persists; rerun this script if WSL gets a new IP.'
     Write-Host '$ Get-Service iphlpsvc' -ForegroundColor DarkGray
     $helper = Get-Service iphlpsvc
     if ($helper.StartType -eq 'Disabled') { throw 'IP Helper is disabled. Windows portproxy requires it; restore IP Helper in Windows Services, then rerun.' }
+    $proxyReady = ($existing.Count -eq 1 -and $existing[0].Target -eq $IP)
     $verb = if ($existing.Count -gt 0) { 'set' } else { 'add' }
-    $args = @('interface', 'portproxy', $verb, 'v4tov4', 'listenaddress=0.0.0.0', "listenport=$ServicePort", "connectaddress=$ip", "connectport=$ServicePort")
+    $proxyArgs = @('interface', 'portproxy', $verb, 'v4tov4', 'listenaddress=0.0.0.0', "listenport=$ServicePort", "connectaddress=$IP", "connectport=$ServicePort")
     if ($ReadOnly) {
-        Write-Host ('Would run: Start-Service iphlpsvc; netsh.exe ' + ($args -join ' '))
+        if ($helper.Status -ne 'Running') { Write-Host 'Would run: Start-Service iphlpsvc' }
+        if (-not $proxyReady) { Write-Host ('Would run: netsh.exe ' + ($proxyArgs -join ' ')) }
+        else { Write-Host 'TCP forwarding already matches; no write needed.' }
     } else {
         if ($helper.Status -ne 'Running') {
             Write-Host '$ Start-Service iphlpsvc' -ForegroundColor DarkGray
             Start-Service iphlpsvc
         }
-        Invoke-Native 'netsh.exe' $args | Write-Host
+        if (-not $proxyReady) { Invoke-Native 'netsh.exe' $proxyArgs | Write-Host }
+        else { Write-Host 'TCP forwarding already matches; no write needed.' }
     }
 
+}
+
+function Set-LocalFirewall([int]$ServicePort, [hashtable]$State, [bool]$ReadOnly) {
+    $name = $State.Name; $owner = $State.Owner; $owned = $State.Owned
     Write-Step '[5/6] Configure the native firewall rule' 'Only this named inbound TCP rule is changed. Other rules, default policies and network profiles stay intact.'
-    $rule = @{ Direction = 'Inbound'; Action = 'Allow'; Protocol = 'TCP'; LocalPort = $ServicePort; Profile = 'Private'; RemoteAddress = 'LocalSubnet'; Enabled = 'True' }
+    $rule = @{ Name = $name; Description = $owner; PolicyStore = 'PersistentStore'; Direction = 'Inbound'; Action = 'Allow'; Protocol = 'TCP'; LocalPort = $ServicePort; RemotePort = 'Any'; LocalAddress = 'Any'; Profile = 'Private'; RemoteAddress = 'LocalSubnet'; Program = 'Any'; Service = 'Any'; Enabled = 'True' }
     $operation = if ($owned.Count -gt 0) { 'Set-NetFirewallRule' } else { 'New-NetFirewallRule' }
-    Write-Host ('$ ' + $operation + " -Name '$name' -Description '$owner' -Direction Inbound -Action Allow -Protocol TCP -LocalPort $ServicePort -Profile Private -RemoteAddress LocalSubnet -Enabled True") -ForegroundColor DarkGray
-    if (-not $ReadOnly) {
-        if ($owned.Count -gt 0) { Set-NetFirewallRule -Name $name -Description $owner @rule | Out-Null }
-        else { New-NetFirewallRule -Name $name -DisplayName "LLM LAN TCP $ServicePort" -Description $owner @rule | Out-Null }
+    if ($owned.Count -eq 0) { $rule.DisplayName = "LLM LAN TCP $ServicePort" }
+    if (Test-FirewallTarget $owned $ServicePort $owner) {
+        Write-Host 'Firewall rule already matches; no write needed.'
+    } else {
+        Write-PSCommand $operation $rule
+        if (-not $ReadOnly) { & $operation @rule | Out-Null }
     }
 
+}
+
+function Confirm-LanSetup([int]$ServicePort, [string]$IP, [hashtable]$State, $Lan, [bool]$ReadOnly) {
+    $name = $State.Name; $owner = $State.Owner
     Write-Step '[6/6] Verify and show client addresses' 'A local check cannot prove access from another computer; test the URL there as well.'
     if ($ReadOnly) { Write-Host 'Check-only: no Windows configuration was changed.'; return }
-    $verified = @(Get-ProxyRows (Invoke-Native 'netsh.exe' @('interface', 'portproxy', 'show', 'v4tov4')) | Where-Object { $_.Listen -eq '0.0.0.0' -and $_.Port -eq $ServicePort -and $_.Target -eq $ip -and $_.TargetPort -eq $ServicePort })
+    $verified = @(Get-ProxyRows (Invoke-Native 'netsh.exe' @('interface', 'portproxy', 'show', 'v4tov4')) | Where-Object { $_.Listen -eq '0.0.0.0' -and $_.Port -eq $ServicePort -and $_.Target -eq $IP -and $_.TargetPort -eq $ServicePort })
     if ($verified.Count -ne 1) { throw 'Forwarding verification failed; inspect the displayed commands.' }
     Write-Host ('$ Get-NetFirewallRule -PolicyStore ActiveStore -Name ' + $name + ' # verify rule, port and address filters') -ForegroundColor DarkGray
     $active = Get-NetFirewallRule -PolicyStore ActiveStore -Name $name
-    $ports = $active | Get-NetFirewallPortFilter
-    $remote = $active | Get-NetFirewallAddressFilter
-    if ([string]$active.Enabled -ne 'True' -or [string]$active.Direction -ne 'Inbound' -or [string]$active.Action -ne 'Allow' -or [string]$active.Profile -ne 'Private' -or [string]$ports.Protocol -notin @('TCP', '6') -or [string]$ports.LocalPort -ne [string]$ServicePort -or [string]$remote.RemoteAddress -ne 'LocalSubnet') {
+    if (-not (Test-FirewallTarget $active $ServicePort $owner)) {
         throw 'Firewall verification failed. Domain policy or other rules may override local settings.'
     }
     if (-not (Test-NetConnection -ComputerName '127.0.0.1' -Port $ServicePort -InformationLevel Quiet -WarningAction SilentlyContinue)) { throw 'The forwarding listener is not reachable yet. Check IP Helper and port reservations.' }
@@ -172,6 +220,16 @@ function Invoke-LanSetup([string]$Distribution, [int]$ServicePort, [bool]$ReadOn
         }
     }
     Write-Host 'Done. No llmsm process or scheduled task is needed. WSL and the model service must remain running.'
+}
+
+function Invoke-LanSetup([string]$Distribution, [int]$ServicePort, [bool]$ReadOnly, [string]$IP) {
+    # Read, validate, configure native targets, then verify. No WSL access after elevation.
+    Assert-Target $Distribution $ServicePort $IP
+    $lan = @(Get-LanInterfaces $ServicePort $IP)
+    $state = Get-PortState $Distribution $ServicePort $IP
+    Set-PortForwarding $ServicePort $IP $state $ReadOnly
+    Set-LocalFirewall $ServicePort $state $ReadOnly
+    Confirm-LanSetup $ServicePort $IP $state $lan $ReadOnly
 }
 
 function Test-Administrator {
@@ -200,6 +258,7 @@ function Require-Environment {
     $required = @('wsl.exe', 'netsh.exe', 'Get-NetConnectionProfile', 'Get-NetIPConfiguration',
                   'Test-NetConnection', 'Get-NetTCPConnection', 'Get-NetFirewallRule',
                   'Get-NetFirewallPortFilter', 'Get-NetFirewallAddressFilter', 'Get-NetFirewallProfile',
+                  'Get-NetFirewallApplicationFilter', 'Get-NetFirewallServiceFilter',
                   'New-NetFirewallRule', 'Set-NetFirewallRule', 'Get-Service', 'Start-Service')
     foreach ($name in $required) {
         if (-not (Get-Command $name -ErrorAction SilentlyContinue)) {
@@ -233,7 +292,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         } else { Invoke-Setup ([bool]$CheckOnly) $PSCommandPath }
     } catch {
         Write-Host ('Setup stopped: ' + $_.Exception.Message) -ForegroundColor Red
-        Write-Host 'Stopped without proceeding to later steps. Follow the guidance above, then rerun.'
+        Write-Host 'Stopped without proceeding to later steps. Completed native changes remain in place; follow the guidance above, then rerun.'
         exit 1
     }
 }

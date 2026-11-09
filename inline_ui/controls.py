@@ -9,11 +9,8 @@ import threading
 from concurrent.futures import Future
 from contextlib import contextmanager
 
+from .keyboard import Cancelled, read_key
 from .style import Styled, boundary, render, rich
-
-
-class Cancelled(Exception):
-    pass
 
 
 class UI:
@@ -78,23 +75,7 @@ class UI:
                 sys.stdout.flush()
 
     def key(self):
-        fd = sys.stdin.fileno()
-        key = os.read(fd, 1)
-        if not key or key == b"\x04":
-            raise EOFError
-        if key == b"\x03":
-            raise KeyboardInterrupt
-        if key == b"\x1b":
-            if not select.select([fd], [], [], 0.12)[0]:
-                raise Cancelled
-            second = os.read(fd, 1)
-            if second in (b"[", b"O") and select.select([fd], [], [], 0.12)[0]:
-                return {b"A": "UP", b"B": "DOWN"}.get(os.read(fd, 1), "")
-            return ""
-        size = 1 if key[0] < 128 else 2 if key[0] < 224 else 3 if key[0] < 240 else 4
-        for _ in range(size - 1):
-            key += os.read(fd, 1)
-        return key.decode("utf-8", errors="replace")
+        return read_key(sys.stdin.fileno())
 
     def choose(self, title, rows, details=(), disabled=(), focus=0):
         if not rows:
@@ -297,9 +278,23 @@ class UI:
                 raise Cancelled
             return raw if raw else str(default)
         text = str(default)
+        cursor = len(text)
         with self.keyboard():
             while True:
-                width = max(1, (shutil.get_terminal_size().columns - 5) // 2)
+                size = shutil.get_terminal_size()
+                if size.lines < 4 or size.columns < 8:
+                    self.paint(
+                        [
+                            self.t(
+                                "请放大终端；Esc 返回。",
+                                "Enlarge terminal; Esc to return.",
+                            )
+                        ]
+                    )
+                    self.key()
+                    continue
+                width = max(1, (size.columns - 5) // 2)
+                start = max(0, cursor - width + 1)
                 self.paint(
                     [
                         rich((title, "title")),
@@ -307,7 +302,11 @@ class UI:
                             "Enter 确认 · Esc 取消 · Ctrl+U 清空",
                             "Enter Confirm · Esc Cancel · Ctrl+U Clear",
                         ),
-                        rich((text[-width:] + "▏", "highlight")),
+                        rich(
+                            (text[start:cursor], "plain"),
+                            ("▏", "accent"),
+                            (text[cursor : start + width], "plain"),
+                        ),
                     ]
                 )
                 key = self.key()
@@ -316,11 +315,23 @@ class UI:
                         raise Cancelled
                     return text
                 if key == "\x15":
-                    text = ""
-                elif key in ("\x7f", "\b"):
-                    text = text[:-1]
+                    text, cursor = "", 0
+                elif key == "LEFT":
+                    cursor = max(0, cursor - 1)
+                elif key == "RIGHT":
+                    cursor = min(len(text), cursor + 1)
+                elif key == "HOME":
+                    cursor = 0
+                elif key == "END":
+                    cursor = len(text)
+                elif key == "DELETE":
+                    text = text[:cursor] + text[cursor + 1 :]
+                elif key in ("\x7f", "\b") and cursor:
+                    text = text[: cursor - 1] + text[cursor:]
+                    cursor -= 1
                 elif len(key) == 1 and key.isprintable():
-                    text += key
+                    text = text[:cursor] + key + text[cursor:]
+                    cursor += 1
 
     def external(self, fn, title=None):
         self.clear()

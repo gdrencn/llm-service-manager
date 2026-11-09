@@ -1,6 +1,7 @@
 """Shared settings, validation and parsing. No per-model overrides."""
 
 import copy
+import ipaddress
 import os
 import pwd
 import re
@@ -12,7 +13,7 @@ from .paths import BACKENDS
 SPECS = {
     "host": ("监听地址", "0.0.0.0", BACKENDS, "text"),
     "port": ("端口", 55555, BACKENDS, "int"),
-    "context": ("上下文 tokens（共享）", 131072, BACKENDS, "int"),
+    "context": ("每请求上下文 tokens（共享）", 131072, BACKENDS, "int"),
     "kv": ("KV 精度", "q8_0", BACKENDS, ("q8_0", "q4_0", "f16")),
     "parallel": ("并发", 1, BACKENDS, "int"),
     "idle_seconds": ("空闲卸载秒数（0=不卸载）", 300, BACKENDS, "int"),
@@ -132,10 +133,25 @@ def validate(c, backend=None):
         raise Error("并发范围为1–8")
     if not 1 <= value(c, "mtp_candidates") <= 16:
         raise Error("MTP草稿长度范围为1–16")
-    if not isinstance(value(c, "host"), str) or not re.fullmatch(
-        r"[A-Za-z0-9_.:\[\]-]+", value(c, "host")
+    host = value(c, "host")
+    if not isinstance(host, str) or not host:
+        raise Error("监听地址必须是 IP 或主机名，不包含端口")
+    if ":" in host or "[" in host or "]" in host:
+        literal = host[1:-1] if host.startswith("[") and host.endswith("]") else host
+        try:
+            ipaddress.IPv6Address(literal)
+        except ValueError as ex:
+            raise Error("IPv6 监听地址无效；端口请在端口项设置") from ex
+    elif re.fullmatch(r"[0-9.]+", host):
+        try:
+            ipaddress.IPv4Address(host)
+        except ValueError as ex:
+            raise Error("IPv4 监听地址无效") from ex
+    elif len(host) > 253 or any(
+        not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", part)
+        for part in host.rstrip(".").split(".")
     ):
-        raise Error("监听地址含无效字符")
+        raise Error("监听主机名无效")
     if not value(c, "gpu_only"):
         raise Error("当前部署要求 llama.cpp/Ollama 100% GPU，不允许关闭")
     if (
@@ -205,14 +221,14 @@ def warnings(c, b):
         out.append("fit关闭：llama.cpp 的 fit-target 不生效。")
     if value(c, "context") > 131072 and b in BACKENDS[:2]:
         out.append(
-            "27B模型尚未验证此上下文的100% GPU容量；加载失败将回滚，不降低配置。"
+            "尚未确认所选模型在此上下文下的100% GPU容量；加载失败将回滚，不降低配置。"
         )
     if b == "strata" and value(c, "vision") and value(c, "reserve_mib") < 1536:
         out.append(
             "GPU视觉需要额外显存；当前预留较小，Strata可能将图片自动回退到CPU。保留默认值不等于保证GPU视觉。"
         )
     if b == "strata" and value(c, "context") > 262144:
-        out.append("当前FN模型原生上限256K，超过上限不属于已验证范围。")
+        out.append("此上下文超过本工具已验证范围；请确认所选模型的原生上限与可用内存。")
     return out
 
 
@@ -228,6 +244,8 @@ def parse_setting(key, raw):
     if key not in SPECS:
         raise Error("未知设置：" + key)
     kind = SPECS[key][3]
+    if isinstance(raw, str):
+        raw = raw.strip()
     if kind == "int":
         try:
             return int(raw[:-1]) * 1024 if raw.lower().endswith("k") else int(raw)

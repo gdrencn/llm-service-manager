@@ -203,7 +203,7 @@ class LanTests(unittest.TestCase):
             lan_ui.show(ui)
         self.assertEqual(ui.document.call_args.args[2], [("back", "返回")])
         self.assertIn(
-            "v0.10.4/scripts/windows-bootstrap.ps1", str(ui.document.call_args.args[1])
+            "v0.10.5/scripts/windows-bootstrap.ps1", str(ui.document.call_args.args[1])
         )
         ui.external.assert_not_called()
 

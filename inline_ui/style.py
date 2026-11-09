@@ -102,7 +102,7 @@ def section(title):
 
 
 def wrap(text, width):
-    text = str(text)
+    text = clean(text)
     out = []
     while text:
         part = clipped(text, width)

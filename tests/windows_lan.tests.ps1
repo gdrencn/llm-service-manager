@@ -9,6 +9,7 @@ if ($errors.Count) { throw ($errors | Out-String) }
 $script:changes = 0
 $script:mode = 'nat'
 $script:proxyText = ''
+$script:otherProxyText = ''
 $script:fw = @()
 $script:busy = $false
 $script:reachable = $true
@@ -20,6 +21,7 @@ function Invoke-Native([string]$Program, [string[]]$Arguments) {
         return '[{"prefsrc":"172.28.1.2"}]'
     }
     if ($cmd -eq 'interface portproxy show v4tov4') { return $script:proxyText }
+    if ($cmd -match 'interface portproxy show (v4tov6|v6tov4|v6tov6)') { return $script:otherProxyText }
     if ($cmd -like '*excludedportrange*') { return '' }
     if ($cmd -match 'portproxy (add|set)') { $script:changes++; $script:proxyText = '0.0.0.0 55555 172.28.1.2 55555'; return 'OK' }
     throw "Unexpected native command $cmd"
@@ -39,9 +41,12 @@ function New-NetFirewallRule {
     $script:changes++
     $script:fw = @([pscustomobject]@{Name='llmsm-LAN-TCP-55555';Description='WSL NAT: test';Enabled='True';Direction='Inbound';Action='Allow';Profile='Private'})
 }
-function Set-NetFirewallRule { $script:changes++ }
-function Get-NetFirewallPortFilter { [pscustomobject]@{Protocol='TCP';LocalPort='55555'} }
-function Get-NetFirewallAddressFilter { [pscustomobject]@{RemoteAddress='LocalSubnet'} }
+function Set-NetFirewallRule { $script:changes++; $script:remoteAddress='LocalSubnet' }
+function Get-NetFirewallPortFilter { [pscustomobject]@{Protocol='TCP';LocalPort='55555';RemotePort='Any'} }
+$script:remoteAddress = 'LocalSubnet'
+function Get-NetFirewallAddressFilter { [pscustomobject]@{RemoteAddress=$script:remoteAddress;LocalAddress='Any'} }
+function Get-NetFirewallApplicationFilter { [pscustomobject]@{Program='Any'} }
+function Get-NetFirewallServiceFilter { [pscustomobject]@{Service='Any'} }
 function Assert([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Expect-Failure([string]$Pattern) {
     $before = $script:changes
@@ -54,7 +59,13 @@ Assert ($script:changes -eq 0) 'CheckOnly mutated Windows state'
 Invoke-LanSetup 'test' 55555 $false '172.28.1.2'
 Assert ($script:changes -eq 2) 'Expected exactly one native proxy and firewall write'
 Invoke-LanSetup 'test' 55555 $false '172.28.1.2'
-Assert ($script:changes -eq 4) 'Rerun failed to update native configuration'
+Assert ($script:changes -eq 2) 'Already-effective settings should not be rewritten'
+$script:otherProxyText = ':: 55555 172.28.1.2 55555'; Expect-Failure '*Another portproxy family*'; $script:otherProxyText = ''
+$script:remoteAddress = 'Any'
+$beforeRepair = $script:changes
+Invoke-LanSetup 'test' 55555 $false '172.28.1.2'
+Assert ($script:changes -eq $beforeRepair + 1) 'Incorrect firewall scope was not repaired exactly once'
+$script:fw += $script:fw[0]; Expect-Failure '*Multiple firewall rules*'; $script:fw = @($script:fw[0])
 $script:firewallEnabled = $false; Expect-Failure '*Private network firewall is disabled*'; $script:firewallEnabled = $true
 $script:serviceState = 'Stopped'; Expect-Failure '*not running*'; $script:serviceState = 'Running'
 $script:privateProfile = $false; Expect-Failure '*choose Private*'; $script:privateProfile = $true
@@ -64,6 +75,7 @@ $script:mode = 'nat'
 $script:reachable = $false; Expect-Failure '*cannot reach*'; $script:reachable = $true
 $script:proxyText = '0.0.0.0 55555 172.28.1.99 55555'; $script:fw = @()
 Expect-Failure '*different portproxy*'
+$script:proxyText = '0.0.0.0 55555 another-host.local 55555'; Expect-Failure '*different portproxy*'
 $script:proxyText = ''; $script:busy = $true; Expect-Failure '*occupied*'; $script:busy = $false
 $script:fw = @([pscustomobject]@{Name='llmsm-LAN-TCP-55555';Description='someone else'})
 Expect-Failure '*another owner*'

@@ -12,6 +12,16 @@ from .paths import STATE
 from .storage import atomic
 
 
+def report_outcome(ops, kind, **data):
+    """A failed final log write must not reverse a completed action or hide its error."""
+    try:
+        ops.event(kind, **data)
+    except OSError as ex:
+        import sys
+
+        print(f"操作结果 {kind}；审计记录写入失败：{ex}；{data}", file=sys.stderr)
+
+
 def cancellable_run(args, cancel, timeout):
     """Bounded read-only subprocess work; terminate our child when its page is left."""
     if cancel.is_set():

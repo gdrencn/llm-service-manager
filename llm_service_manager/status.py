@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .availability import available_backends
 from .config import SPECS, Error, address, model, value
-from .paths import existing_unit
+from .paths import BACKENDS, existing_unit
 from .presentation import formatted, label, render, rich, section, t
 from .services import Services as Ops
 
@@ -16,7 +16,8 @@ from .services import Services as Ops
 def collect(c, ops=None):
     ops = ops or Ops(quiet=True)
     result = {"services": {}, "runtime": {}, "errors": [], "gpu": [], "memory": {}}
-    for b in available_backends(c):
+    installed = available_backends(c)
+    for b in BACKENDS:
         unit = existing_unit(b)
         try:
             r = ops.run(
@@ -42,11 +43,15 @@ def collect(c, ops=None):
                 False,
                 timeout=5,
             )
-            if r.returncode:
-                raise Error(r.stdout.strip() or "无法查询 systemd")
-            result["services"][b] = dict(
+            properties = dict(
                 line.split("=", 1) for line in r.stdout.splitlines() if "=" in line
             )
+            if r.returncode and properties.get("LoadState") != "not-found":
+                raise Error(r.stdout.strip() or "无法查询 systemd")
+            if b not in installed and properties.get("LoadState") == "not-found":
+                continue
+            properties["ProgramAvailable"] = b in installed
+            result["services"][b] = properties
         except (OSError, TimeoutError, subprocess.TimeoutExpired, Error) as ex:
             result["errors"].append(str(ex))
     active = [
@@ -156,6 +161,15 @@ def show(c, snapshot=None):
             else states.get(state, state),
             "good" if state == "active" else "muted",
         )
+        if p.get("ProgramAvailable") is False:
+            field(
+                t("  程序文件", "  Program files"),
+                t(
+                    "未找到；以上为已有服务的实际状态",
+                    "Missing; the state above is from the existing service",
+                ),
+                "warn",
+            )
         field(
             t("  开机自启（systemd实际状态）", "  Boot enablement (systemd)"),
             p.get("UnitFileState", t("未知", "Unknown")),
