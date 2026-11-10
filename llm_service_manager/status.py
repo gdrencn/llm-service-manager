@@ -62,7 +62,7 @@ def collect(c, ops=None):
         b = active[0]
         url = "http://" + address(value(c, "host"), value(c, "port"), True)
         endpoint = (
-            "/api/ps" if b == "ollama" else "/v1/status" if b == "strata" else "/health"
+            "/api/ps" if b == "ollama" else "/v1/status" if b == "strata" else "/models"
         )
         try:
             data = ops.http(url + endpoint, timeout=3)
@@ -246,19 +246,27 @@ def show(c, snapshot=None):
             if k in data.get("activity", {}):
                 field(t(zh, en), data["activity"][k])
     elif b == "llama.cpp":
-        field(
-            t("推理接口", "Inference endpoint"),
-            t("就绪", "Ready")
-            if data.get("status") == "ok"
-            else str(data.get("status", t("未知", "Unknown"))),
-        )
-        field(
-            t("模型驻留", "Model residency"),
-            t(
-                "此健康接口未单独报告；不依据服务状态推断",
-                "Not separately reported by this health endpoint; not inferred from service state",
-            ),
-        )
+        from .model_lifecycle import router_models
+
+        labels = {
+            "loaded": t("已加载", "Loaded"),
+            "unloaded": t("已卸载；新请求会自动加载", "Unloaded; reloads on request"),
+            "sleeping": t("休眠；新请求会自动加载", "Sleeping; reloads on request"),
+            "loading": t("加载中", "Loading"),
+            "unloading": t("卸载中", "Unloading"),
+        }
+        try:
+            for item in router_models(data):
+                state = item["status"]
+                field(t("实际模型", "Runtime model"), item["id"])
+                field(
+                    t("模型驻留", "Model residency"),
+                    t("加载失败", "Load failed")
+                    if state.get("failed")
+                    else labels.get(state["value"], state["value"]),
+                )
+        except Error as ex:
+            field(t("模型驻留", "Model residency"), str(ex), "warn")
     if not runtime:
         field(
             t("模型驻留", "Model residency"),

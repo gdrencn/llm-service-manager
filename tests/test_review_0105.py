@@ -33,6 +33,9 @@ print('EDIT_OK')
         self.assertIn(b"EDIT_OK", out)
         self.assertNotIn(b"\x1b[1;30;46m", out)
         self.assertIn(b"\x1b[?25h", out)
+        self.assertNotIn("▏".encode(), out)
+        self.assertIn(b"\x1b[1A\r\x1b[5G\x1b[?25h", out)
+        self.assertIn(b"\x1b[?25l\x1b[1B\r", out)
 
     def test_unknown_escape_sequence_is_consumed_and_unicode_can_be_edited(self):
         script = """from inline_ui import UI
@@ -46,6 +49,8 @@ print('EDIT_OK')
         )
         self.assertEqual(code, 0, out)
 
+        self.assertIn(b"\x1b[1A\r\x1b[5G\x1b[?25h", out)
+
     def test_wrap_cleans_before_measuring_and_slicing(self):
         self.assertEqual(wrap("a\x00bc", 1), ["a", "b", "c"])
 
@@ -56,9 +61,9 @@ class ConfigurationReviewTests(unittest.TestCase):
         c["settings"]["parallel"]["value"] = 2
         c["settings"]["context"]["value"] = 4096
         files = native(c, lambda _: json.dumps(STRATA))
-        llama = files["/etc/systemd/system/" + UNITS["llama.cpp"]]
-        self.assertIn('"--ctx-size" "8192"', llama)
-        self.assertIn('"--parallel" "2"', llama)
+        llama = files["/etc/llama.cpp/llama-local.ini"]
+        self.assertIn("ctx-size = 8192", llama)
+        self.assertIn("parallel = 2", llama)
         self.assertIn(
             "PARAMETER num_ctx 4096", files["/etc/ollama/ollama-local.Modelfile"]
         )

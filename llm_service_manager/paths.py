@@ -6,6 +6,7 @@ CONFIG = Path("/etc/llm-service-manager/config.json")
 STATE = Path("/var/lib/llm-service-manager")
 PREFERENCES = Path("/etc/llm-service-manager/ui.json")
 STRATA_CONFIG = "/etc/strata/strata-local.json"
+LLAMA_PRESET = "/etc/llama.cpp/llama-local.ini"
 OLLAMA_MODELFILE = "/etc/ollama/ollama-local.Modelfile"
 OLLAMA_DROPIN = "/etc/systemd/system/ollama.service.d/ollama-local.conf"
 BACKENDS = ("ollama", "llama.cpp", "strata")

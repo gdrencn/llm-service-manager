@@ -58,14 +58,24 @@ class ProductTests(unittest.TestCase):
             self.assertIn(key, disabled)
         self.assertIn("不适用", str(dict(rows)["ple_io"]))
 
-    def test_stop_cancel_last_but_default(self):
+    def test_release_cancel_last_but_default(self):
         ui = Mock()
         ui.choose.return_value = False
-        tui.stop_services(ui)
+        tui.release_resources(ui)
         rows = ui.choose.call_args.args[1]
         self.assertEqual([key for key, _ in rows], [True, False])
         self.assertEqual(ui.choose.call_args.kwargs["focus"], 1)
         ui.external.assert_not_called()
+
+    def test_release_menu_calls_unload_not_service_stop(self):
+        ui = Mock()
+        ui.choose.return_value = True
+        ui.external.side_effect = lambda fn, title: fn()
+        with patch.object(tui, "release_model") as release:
+            tui.release_resources(ui)
+            release.assert_called_once_with()
+        self.assertIn("release", dict(tui.main_menu()))
+        self.assertNotIn("stop", dict(tui.main_menu()))
 
     def test_options_only_language_version_back(self):
         ui = Mock()
@@ -152,7 +162,7 @@ class ProductTests(unittest.TestCase):
         out = io.StringIO()
         with patch("sys.stdout", out):
             status.show(fixture(), snap)
-        self.assertIn("不依据服务状态推断", out.getvalue())
+        self.assertIn("未取得官方 llama.cpp Router 模型状态", out.getvalue())
 
     def test_output_boundaries_and_no_color(self):
         out = io.StringIO()

@@ -1,73 +1,88 @@
-"""Render official llama.cpp configuration. No I/O except the supplied source reader."""
+"""Official llama.cpp Router and preset; no tool-owned serving process."""
 
 from pathlib import Path
 
-from ..config import model, value
+from ..config import Error, model, value
 from ..model_names import public_name
-from ..paths import UNITS
+from ..paths import LLAMA_PRESET, UNITS
 from .common import service
+
+
+def ini_value(value):
+    text = str(value)
+    # The official parser has no quoting/escaping for these delimiters.
+    if not text or text != text.strip() or any(c in text for c in "\r\n;#\x00"):
+        raise Error("llama.cpp 官方 preset 无法表示这个值：" + repr(text))
+    return text
 
 
 def render(c, read):
     b = "llama.cpp"
     m = model(c, b)
     home = Path(c["runtime"]["home"])
-    out = {}
 
     def v(key):
         return value(c, key)
 
-    a = [
+    name = ini_value(public_name(m))
+    if any(ch in name for ch in "[]") or name == "*":
+        raise Error("模型名称不能作为 llama.cpp preset 节名")
+    params = {
+        "model": m["path"],
+        "ctx-size": v("context") * v("parallel"),
+        "parallel": v("parallel"),
+        "cache-type-k": v("kv"),
+        "cache-type-v": v("kv"),
+        "flash-attn": "on" if v("flash_attention") else "off",
+        "fit": "on" if v("fit") else "off",
+        "fit-target": v("reserve_mib"),
+        "sleep-idle-seconds": v("idle_seconds") or -1,
+        "gpu-layers": "all",
+        "kv-offload": "true",
+        "log-verbosity": 4,
+        "load-on-startup": "true",
+        "spec-type": "draft-mtp" if v("mtp") else "none",
+    }
+    if v("vision"):
+        params.update(mmproj=m.get("vision_path", ""))
+        params["mmproj-offload"] = "true"
+    else:
+        params["no-mmproj"] = "true"
+    if v("mtp"):
+        params.update(
+            {
+                "spec-draft-n-max": v("mtp_candidates"),
+                "spec-draft-type-k": v("mtp_kv"),
+                "spec-draft-type-v": v("mtp_kv"),
+                "spec-draft-ngl": "all",
+            }
+        )
+        if m.get("mtp_path"):
+            params["spec-draft-model"] = m["mtp_path"]
+    preset = "version = 1\n\n[" + name + "]\n"
+    preset += "".join(k + " = " + ini_value(x) + "\n" for k, x in params.items())
+    args = [
         str(home / ".local/bin/llama"),
         "serve",
-        "--model",
-        m["path"],
-        "--alias",
-        public_name(m),
         "--host",
         v("host"),
         "--port",
         str(v("port")),
-        "--ctx-size",
-        # llama.cpp divides this pool between explicitly configured slots.
-        str(v("context") * v("parallel")),
-        "--parallel",
-        str(v("parallel")),
-        "--cache-type-k",
-        v("kv"),
-        "--cache-type-v",
-        v("kv"),
-        "--flash-attn",
-        "on" if v("flash_attention") else "off",
-        "--fit",
-        "on" if v("fit") else "off",
-        "--fit-target",
-        str(v("reserve_mib")),
-        "--sleep-idle-seconds",
-        str(v("idle_seconds") or -1),
-        "--gpu-layers",
-        "all",
-        "--kv-offload",
-        # Official loading diagnostics are required to verify full GPU offload.
-        "--log-verbosity",
-        "4",
+        "--models-preset",
+        LLAMA_PRESET,
+        "--models-max",
+        "1",
+        "--models-autoload",
     ]
-    if v("vision"):
-        a += ["--mmproj", m.get("vision_path", ""), "--mmproj-offload"]
-    if v("mtp"):
-        a += [
-            "--spec-type",
-            "draft-mtp",
-            "--spec-draft-n-max",
-            str(v("mtp_candidates")),
-            "--spec-draft-type-k",
-            v("mtp_kv"),
-            "--spec-draft-type-v",
-            v("mtp_kv"),
-            "--spec-draft-ngl",
-            "all",
-        ]
-        if m.get("mtp_path"):
-            a += ["--spec-draft-model", m["mtp_path"]]
-    out["/etc/systemd/system/" + UNITS[b]] = service(c, b, a)
-    return out
+    return {
+        LLAMA_PRESET: preset,
+        "/etc/systemd/system/" + UNITS[b]: service(
+            c,
+            b,
+            args,
+            extra=(
+                "CacheDirectory=llama-server-local\n"
+                "Environment=LLAMA_CACHE=/var/cache/llama-server-local\n"
+            ),
+        ),
+    }

@@ -9,7 +9,7 @@ from pathlib import Path
 from .commands import commands
 from .config import BACKENDS, SPECS, Error, model, parse_setting
 from .discovery import discover
-from .manager import recover, stop, switch
+from .manager import recover, release, stop, switch
 from .preflight import preflight
 from .presentation import VERSION, boundary, load_language, t
 from .status import collect as collect_status
@@ -26,8 +26,12 @@ def main():
     )
     p.add_argument("--version", action="version", version="llmsm " + VERSION)
     sub = p.add_subparsers(dest="cmd")
-    for name in ["models", "recover", "stop", "menu", "tui"]:
+    for name in ["models", "recover", "menu", "tui"]:
         sub.add_parser(name)
+    sub.add_parser(
+        "release", help=t("卸载模型并保留服务", "Unload models, keep service online")
+    )
+    sub.add_parser("stop", help=t("停止整个底座服务", "Stop backend services"))
     lan = sub.add_parser("lan")
     lan_flags = lan.add_mutually_exclusive_group()
     lan_flags.add_argument("--json", action="store_true")
@@ -55,6 +59,7 @@ def main():
         "tui",
         "switch",
         "stop",
+        "release",
         "recover",
         "status",
         "models",
@@ -77,6 +82,9 @@ def main():
         return
     if args.cmd == "recover":
         recover()
+        return
+    if args.cmd == "release":
+        release()
         return
     if args.cmd == "stop":
         stop()

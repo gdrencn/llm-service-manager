@@ -25,6 +25,15 @@ def stop(ops=None):
         ops.stop()
 
 
+def release(ops=None, config_path=CONFIG):
+    from .model_lifecycle import release as release_models
+    from .storage import read_config
+
+    ops = ops or Ops()
+    with locked(ops.state):
+        release_models(read_config(config_path), ops)
+
+
 def switch(c, b, expected, ops=None, config_path=CONFIG):
     ops = ops or Ops()
     state = ops.state
@@ -39,6 +48,8 @@ def switch(c, b, expected, ops=None, config_path=CONFIG):
             raise Error("\n".join(errors))
         for text in notes:
             ops.event("warning", message=text)
+        if b == "llama.cpp":
+            ops.check_router(c)
         installed = available_backends(c)
         files = native(c, backends=[b])
         for other in installed:

@@ -21,6 +21,21 @@ from .storage import read_config
 
 
 class Services(Operations):
+    def check_router(self, c):
+        executable = program(c, "llama.cpp")
+        if not executable:
+            raise Error("llama.cpp 程序不存在")
+        help_text = self.run([executable, "serve", "--help"], timeout=30).stdout
+        if any(
+            flag not in help_text
+            for flag in (
+                "--models-preset",
+                "--models-max",
+                "--models-autoload",
+            )
+        ):
+            raise Error("当前 llama.cpp 不支持所需官方 Router 功能，请先按官方方式更新")
+
     def available_units(self):
         found = []
         for unit in ALL_UNITS:
@@ -193,6 +208,9 @@ class Services(Operations):
             ):
                 raise Error("未确认模型100% GPU加载，拒绝接受本次切换")
         elif b == "llama.cpp":
+            from .model_lifecycle import wait_router_loaded
+
+            wait_router_loaded(self, url, public_name(m))
             inv = self.run(
                 ["systemctl", "show", unit, "--property=InvocationID", "--value"]
             ).stdout.strip()

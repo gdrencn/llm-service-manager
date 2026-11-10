@@ -51,8 +51,8 @@ class ModelNamesTests(unittest.TestCase):
         c["model_selection"]["llama.cpp"] = "initial-llamacpp"
         result = native(c, lambda _: json.dumps(STRATA))
         self.assertIn(
-            '"--alias" "model"',
-            result["/etc/systemd/system/llama-server-local.service"],
+            "[model]\n",
+            result["/etc/llama.cpp/llama-local.ini"],
         )
         self.assertNotIn(
             "initial-llamacpp", result["/etc/systemd/system/llama-server-local.service"]

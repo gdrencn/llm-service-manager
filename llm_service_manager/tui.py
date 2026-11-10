@@ -12,7 +12,7 @@ from .discovery import discover
 from .install_guide import choose_installation
 from .inventory import inventory
 from .lan_ui import show as show_lan
-from .manager import stop as stop_model
+from .manager import release as release_model
 from .manager import switch
 from .network import port_adjustment
 from .paths import CONFIG, PREFERENCES, STATE
@@ -36,7 +36,7 @@ def main_menu():
         ("switch", t("切换底座/模型", "Switch backend/model")),
         ("commands", t("安装大模型和底座", "Install models and backends")),
         ("status", t("查看当前模型和服务状态", "Current model and service status")),
-        ("stop", t("停止模型并释放资源", "Stop model and release resources")),
+        ("release", t("释放资源", "Release resources")),
         ("lan", t("局域网访问", "LAN access")),
         ("options", t("选项", "Options")),
         ("exit", t("退出", "Exit")),
@@ -298,33 +298,33 @@ def selection_flow(ui, c, rev):
         return
 
 
-def stop_services(ui):
+def release_resources(ui):
     rows = [
-        (True, t("停止模型并释放资源", "Stop model and release resources")),
+        (True, t("释放资源", "Release resources")),
         (False, t("返回", "Back")),
     ]
     if ui.choose(
-        t("停止当前模型服务？", "Stop current model services?"),
+        t("释放当前模型资源？", "Release current model resources?"),
         rows,
         [
             t(
-                "会终止正在处理的请求并释放该服务持有的模型资源。",
-                "Stops active requests and releases resources held by these services.",
+                "卸载模型并保留服务；新请求会自动加载。请先结束正在处理的任务。",
+                "Unloads models and keeps the service online. New requests reload them. Finish active tasks first.",
             )
         ],
         focus=1,
     ):
 
-        def stop():
-            stop_model()
+        def unload():
+            release_model()
             print(
                 t(
-                    "模型服务已停止，服务持有的模型资源已释放。其它程序的资源不会受影响。",
-                    "Model services stopped; their model resources have been released. Other programs are unaffected.",
+                    "模型已卸载或原本未加载；服务保持原状态，新推理请求可重新加载模型。",
+                    "Models are unloaded or were already absent; service state is unchanged. New inference requests may reload models.",
                 )
             )
 
-        ui.external(stop, t("停止结果", "Stop result"))
+        ui.external(unload, t("释放结果", "Release result"))
 
 
 def main():
@@ -368,7 +368,7 @@ def run_menu(ui):
                     lambda: show_status(c),
                     t("当前模型和服务状态", "Current model and service status"),
                 ),
-                "stop": lambda: stop_services(ui),
+                "release": lambda: release_resources(ui),
             }
             actions[action]()
         except EOFError:

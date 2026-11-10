@@ -10,7 +10,7 @@ from concurrent.futures import Future
 from contextlib import contextmanager
 
 from .keyboard import Cancelled, read_key
-from .style import Styled, boundary, render, rich
+from .style import Styled, boundary, cells, clean, render, rich
 
 
 class UI:
@@ -76,6 +76,17 @@ class UI:
 
     def key(self):
         return read_key(sys.stdin.fileno())
+
+    @contextmanager
+    def input_cursor(self, prefix):
+        """Show the native cursor on the last painted line; restore paint's anchor."""
+        try:
+            sys.stdout.write(f"\x1b[1A\r\x1b[{cells(clean(prefix)) + 1}G\x1b[?25h")
+            sys.stdout.flush()
+            yield
+        finally:
+            sys.stdout.write("\x1b[?25l\x1b[1B\r")
+            sys.stdout.flush()
 
     def choose(self, title, rows, details=(), disabled=(), focus=0):
         if not rows:
@@ -302,14 +313,11 @@ class UI:
                             "Enter 确认 · Esc 取消 · Ctrl+U 清空",
                             "Enter Confirm · Esc Cancel · Ctrl+U Clear",
                         ),
-                        rich(
-                            (text[start:cursor], "plain"),
-                            ("▏", "accent"),
-                            (text[cursor : start + width], "plain"),
-                        ),
+                        text[start : start + width],
                     ]
                 )
-                key = self.key()
+                with self.input_cursor(text[start:cursor]):
+                    key = self.key()
                 if key in ("\n", "\r"):
                     if text == "/cancel":
                         raise Cancelled

@@ -77,8 +77,8 @@ class ConfigTests(unittest.TestCase):
                 f"num_ctx {context}", files["/etc/ollama/ollama-local.Modelfile"]
             )
             self.assertIn(
-                f'"--ctx-size" "{context}"',
-                files["/etc/systemd/system/llama-server-local.service"],
+                f"ctx-size = {context}\n",
+                files["/etc/llama.cpp/llama-local.ini"],
             )
             self.assertIn(
                 "OLLAMA_GPU_OVERHEAD=4294967296",
@@ -106,8 +106,8 @@ class ConfigTests(unittest.TestCase):
             f["/etc/systemd/system/ollama.service.d/ollama-local.conf"],
         )
         self.assertIn(
-            '"--sleep-idle-seconds" "-1"',
-            f["/etc/systemd/system/llama-server-local.service"],
+            "sleep-idle-seconds = -1\n",
+            f["/etc/llama.cpp/llama-local.ini"],
         )
         self.assertEqual(
             json.loads(f["/etc/strata/strata-local.json"])["idle_unload_s"], 0
@@ -238,9 +238,7 @@ class ConfigTests(unittest.TestCase):
         c = fixture()
         c["catalog"][1]["path"] = "/models/space $x %n.gguf"
         f = native(c, lambda p: json.dumps(STRATA))
-        self.assertIn(
-            "space $$x %%n.gguf", f["/etc/systemd/system/llama-server-local.service"]
-        )
+        self.assertIn("space $x %n.gguf", f["/etc/llama.cpp/llama-local.ini"])
 
     def test_injection_rejected(self):
         c = fixture()
@@ -298,6 +296,9 @@ class ConfigTests(unittest.TestCase):
 
 
 class FakeOps:
+    def check_router(self, c):
+        pass
+
     def __init__(self, state, fail=False):
         self.state = state
         self.running = ["ollama.service"]
