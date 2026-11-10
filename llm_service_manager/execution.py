@@ -6,6 +6,7 @@ import time
 import urllib.request
 from concurrent.futures import CancelledError
 from pathlib import Path
+from urllib.error import HTTPError
 
 from .config import Error
 from .paths import STATE
@@ -150,15 +151,25 @@ class Operations:
         return r
 
     def http(self, url, body=None, timeout=15):
+        """Talk directly to the managed backend, independent of download proxies."""
         self.event("http", url=url, body=body)
         data = None if body is None else json.dumps(body).encode()
         req = urllib.request.Request(
             url, data=data, headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            result = json.load(r)
-        if not isinstance(result, dict):
-            raise ValueError("接口返回的 JSON 不是对象")
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:
+            with opener.open(req, timeout=timeout) as r:
+                result = json.load(r)
+            if not isinstance(result, dict):
+                raise ValueError("接口返回的 JSON 不是对象")
+        except (OSError, ValueError) as ex:
+            # HTTPError owns a response stream too. Preserve its status code for
+            # callers (e.g. unload's 409), while always releasing the connection.
+            if isinstance(ex, HTTPError):
+                ex.close()
+            report_outcome(self, "http-failed", url=url, error=str(ex))
+            raise
         self.event("http-result", response=result)
         return result
 
