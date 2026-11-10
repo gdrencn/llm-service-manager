@@ -9,6 +9,8 @@ from pathlib import Path
 
 from .paths import BACKENDS
 
+SCHEMA_VERSION = 3
+
 # label, default, applicable backends, input kind
 SPECS = {
     "host": ("监听地址", "0.0.0.0", BACKENDS, "text"),
@@ -62,14 +64,17 @@ def normalized(raw, home=None, user=None):
         raise Error("配置参数必须包含 value")
     if any(not isinstance(v, dict) for v in raw.get("catalog", [])):
         raise Error("模型目录格式错误")
-    if type(raw.get("schema", 2)) is not int or raw.get("schema", 2) != 2:
+    if (
+        type(raw.get("schema", SCHEMA_VERSION)) is not int
+        or raw.get("schema", SCHEMA_VERSION) != SCHEMA_VERSION
+    ):
         raise Error("不支持的配置版本")
     if "models" in raw:
         raise Error("配置只支持 catalog 和 model_selection，不支持 models 字段")
     if set(raw.get("settings", {})) - set(SPECS):
         raise Error("配置包含未知参数")
     c = copy.deepcopy(raw)
-    c["schema"] = 2
+    c["schema"] = SCHEMA_VERSION
     c.setdefault("runtime", {"home": home, "user": user})
     c.setdefault("settings", {})
     for k, (_, default, applies, _) in SPECS.items():

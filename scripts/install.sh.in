@@ -54,6 +54,7 @@ import json,pwd,sys
 from pathlib import Path
 sys.path.insert(0,sys.argv[1])
 from llm_service_manager.config import normalized,validate
+from llm_service_manager.config_document import encode
 from llm_service_manager.storage import atomic,read_config
 from llm_service_manager.network import initialize_port
 # Import UI and CLI before activating the candidate; importing runs no operation.
@@ -65,7 +66,7 @@ else:
  account=pwd.getpwnam(sys.argv[2])
  cfg=initialize_port(normalized({},home=account.pw_dir,user=account.pw_name))
  validate(cfg)
- atomic(p,json.dumps(cfg,ensure_ascii=False,indent=2)+'\n')
+ atomic(p,json.dumps(encode(cfg),ensure_ascii=False,indent=2)+'\n')
 PY
 as_root ln -s "$llmsm_release" "/opt/llm-service-manager/.current-$llmsm_generation"
 as_root mv -Tf "/opt/llm-service-manager/.current-$llmsm_generation" /opt/llm-service-manager/current

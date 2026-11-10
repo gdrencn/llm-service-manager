@@ -2,7 +2,7 @@
 
 import copy
 
-from .config import SPECS, Error, normalized, validate
+from .config import SCHEMA_VERSION, SPECS, Error, normalized, validate
 from .paths import BACKENDS
 
 GLOBAL_SETTINGS = frozenset(("host", "port", "autostart"))
@@ -45,7 +45,10 @@ def decode(document):
     """Read only the current on-disk format; no historical schema migration."""
     if not isinstance(document, dict):
         raise Error("配置必须是 JSON 对象")
-    if type(document.get("schema", 3)) is not int or document.get("schema", 3) != 3:
+    if (
+        type(document.get("schema", SCHEMA_VERSION)) is not int
+        or document.get("schema", SCHEMA_VERSION) != SCHEMA_VERSION
+    ):
         raise Error("不支持的配置版本")
     if set(document) - {"schema", "global", *BACKENDS, *METADATA}:
         raise Error("配置包含未知区域")
@@ -90,7 +93,7 @@ def encode(c):
     banks[backend] = scoped_values(c, backend_keys(backend))
     defaults = normalized({})
     document = {
-        "schema": 3,
+        "schema": SCHEMA_VERSION,
         "global": {
             "runtime": copy.deepcopy(c["runtime"]),
             "settings": scoped_values(c, GLOBAL_SETTINGS),

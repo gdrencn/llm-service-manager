@@ -2,16 +2,19 @@
 
 import copy
 import json
+import os
+import pwd
+import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from test_config import STRATA, FakeOps, fixture
 
-from llm_service_manager import manager
+from llm_service_manager import manager, tui
 from llm_service_manager.adapters import native
-from llm_service_manager.config import Error, value
+from llm_service_manager.config import SCHEMA_VERSION, Error, value
 from llm_service_manager.config_document import decode, encode, for_backend
 from llm_service_manager.paths import LLAMA_PRESET, OLLAMA_MODELFILE, STRATA_CONFIG
 from llm_service_manager.storage import read_config, revision
@@ -26,6 +29,90 @@ def config():
 
 
 class BackendSettingsTests(unittest.TestCase):
+    def test_first_use_initialization_writes_a_readable_scoped_document(self):
+        # Execute only the embedded Python configuration writer, never the shell
+        # installer, package commands, downloads, or service operations.
+        root = Path(__file__).resolve().parent.parent
+        template = (root / "scripts/install.sh.in").read_text()
+        source = template.split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            source = source.replace(
+                "Path('/etc/llm-service-manager/config.json')", f"Path({str(path)!r})"
+            )
+            with (
+                patch("sys.argv", ["-", str(root), pwd.getpwuid(os.getuid()).pw_name]),
+                patch("sys.path", list(sys.path)),
+                patch("llm_service_manager.network.free_port", return_value=55556),
+                patch("subprocess.run", side_effect=AssertionError("no commands")),
+            ):
+                exec(compile(source, "installer-config-init", "exec"), {})
+                c = read_config(path)
+                self.assertEqual(c["schema"], SCHEMA_VERSION)
+                self.assertEqual(value(c, "port"), 55556)
+                for backend in ("ollama", "llama.cpp", "strata"):
+                    self.assertEqual(value(for_backend(c, backend), "context"), 131072)
+                self.assertEqual(json.loads(path.read_text()), encode(c))
+                before = path.read_bytes()
+                exec(compile(source, "installer-config-recheck", "exec"), {})
+                self.assertEqual(path.read_bytes(), before)
+
+    def test_backend_validation_keeps_editor_open_and_preserves_changes(self):
+        c = for_backend(config(), "llama.cpp")
+        ui = Mock()
+        ui.choose.side_effect = [
+            "context",
+            "flash_attention",
+            False,
+            "review",
+            "flash_attention",
+            True,
+            "review",
+        ]
+        ui.input.return_value = "16k"
+        edited = tui.edit(ui, c, "llama.cpp")
+        ui.text.assert_called_once()
+        self.assertIn("Flash Attention", ui.text.call_args.args[1])
+        self.assertEqual(value(edited, "context"), 16384)
+        self.assertEqual(value(c, "context"), 8192)
+        self.assertEqual(encode(edited)["ollama"], encode(c)["ollama"])
+
+    def test_failed_switch_restores_all_scopes_and_only_target_native_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "config.json"
+            c = config()
+            path.write_text(json.dumps(encode(c)))
+            before = path.read_bytes()
+            candidate = for_backend(c, "llama.cpp")
+            candidate["settings"]["context"]["value"] = 16384
+            candidate["settings"]["port"]["value"] = 55556
+            candidate["settings"]["autostart"]["value"] = False
+            target = root / "llama.ini"
+            other = root / "ollama.conf"
+            target.write_text("original llama")
+            target.chmod(0o640)
+            other.write_text("original ollama")
+            ops = FakeOps(root / "state", fail=True)
+            with (
+                patch.object(manager, "preflight", return_value=([], [])),
+                patch.object(
+                    manager, "native", return_value={str(target): "candidate"}
+                ),
+                self.assertRaises(Error),
+            ):
+                manager.switch(candidate, "llama.cpp", revision(path), ops, path)
+            self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(target.read_text(), "original llama")
+            self.assertEqual(target.stat().st_mode & 0o777, 0o640)
+            self.assertEqual(other.read_text(), "original ollama")
+            self.assertEqual(ops.running, ["ollama.service"])
+            self.assertFalse((ops.state / "pending.json").exists())
+            self.assertEqual(value(read_config(path), "context"), 4096)
+            self.assertEqual(
+                value(for_backend(read_config(path), "llama.cpp"), "context"), 8192
+            )
+
     def test_roundtrip_and_switching_views_do_not_mix_values(self):
         c = config()
         original = copy.deepcopy(c)

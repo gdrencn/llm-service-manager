@@ -167,7 +167,7 @@ def edit(ui, c, b):
             raise Cancelled
         if key == "review":
             try:
-                validate(c)
+                validate(c, b)
                 return c
             except Error as ex:
                 ui.text(t("配置错误", "Invalid configuration"), str(ex))
