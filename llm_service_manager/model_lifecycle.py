@@ -40,7 +40,7 @@ def wait_router_loaded(ops, url, name, timeout=900):
         item = router_model(ops.http(url + "/models"), name)
         state = item["status"]
         if state.get("failed") or state["value"] == "failed":
-            raise Error("llama.cpp 模型加载失败：" + str(state))
+            raise Error("llama.cpp 模型加载失败：" + name + "（exit_code=" + str(state.get("exit_code", "unknown")) + "）")
         if state["value"] == "loaded":
             return
         if time.monotonic() >= deadline:

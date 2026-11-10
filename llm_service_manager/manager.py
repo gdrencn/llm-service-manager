@@ -95,22 +95,40 @@ def switch(c, b, expected, ops=None, config_path=CONFIG):
                     ops.write(p, text)
             ops.run(["systemctl", "daemon-reload"])
             ops.prepare_runtime(c, files)
-            ops.run(["systemctl", "start", UNITS[b]], timeout=900)
-            if b == "ollama":
-                txn["ollama_model"] = ops.snapshot_ollama(c)
-                atomic(pending, json.dumps(txn))
-            ops.ready(c, b)
+            startup_started = time.time()
+            try:
+                ops.run(["systemctl", "start", UNITS[b]], timeout=900)
+                if b == "ollama":
+                    txn["ollama_model"] = ops.snapshot_ollama(c)
+                    atomic(pending, json.dumps(txn))
+                ops.ready(c, b)
+            except (Error, OSError, ValueError) as ex:
+                from .startup_failure import capture
+
+                raise capture(ops, c, b, ex, startup_started) from ex
             if ops.active() != [UNITS[b]]:
                 raise Error("底座互斥检查未通过")
             ops.boot_target(b, value(c, "autostart"))
             ops.write(config_path, files[str(config_path)])
             atomic(state / "last-success.json", json.dumps(txn))
             pending.unlink()
-        except BaseException:
+        except BaseException as failure:
+            rollback_error = None
             try:
                 recover(ops, lock=False)
             except BaseException as ex:
+                rollback_error = ex
                 report_outcome(ops, "rollback-failed", error=str(ex))
+            from .startup_failure import StartupFailure
+            from .presentation import t
+
+            if isinstance(failure, StartupFailure):
+                outcome = (
+                    t("回滚未完成；请运行 llmsm recover。", "Rollback incomplete; run llmsm recover.")
+                    if rollback_error is not None else
+                    t("已恢复切换前的配置和服务。", "Configuration and services restored to their previous state.")
+                )
+                raise StartupFailure(str(failure) + "\n\n" + outcome) from failure
             raise
         report_outcome(ops, "transaction-committed", target=c["target"])
 
