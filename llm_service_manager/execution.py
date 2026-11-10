@@ -12,6 +12,23 @@ from .paths import STATE
 from .storage import atomic
 
 
+def inspection_command(args):
+    """Keep routine checks in the audit log, without flooding progress output."""
+    argv = [str(arg) for arg in args]
+    if not argv:
+        return False
+    name = Path(argv[0]).name
+    return (
+        (
+            name == "systemctl"
+            and len(argv) > 1
+            and argv[1] in ("show", "is-active", "is-enabled")
+        )
+        or name in ("journalctl", "systemd-analyze")
+        or "--help" in argv
+    )
+
+
 def report_outcome(ops, kind, **data):
     """A failed final log write must not reverse a completed action or hide its error."""
     try:
@@ -66,7 +83,9 @@ class Operations:
         if not self.quiet:
             from .presentation import render, rich, t
 
-            if kind == "command":
+            if kind == "progress":
+                print(data.get("message", ""), flush=True)
+            elif kind == "command" and not inspection_command(data["argv"]):
                 import shlex
 
                 print(
@@ -100,7 +119,9 @@ class Operations:
                     ),
                 }
                 print(names[kind], flush=True)
-            elif kind == "write":
+            elif kind == "write" and not str(data.get("path", "")).startswith(
+                "/tmp/llm-unit-check-"
+            ):
                 print(t("写入：", "Write: ") + str(data.get("path", "")), flush=True)
 
     def run(self, args, check=True, timeout=120):

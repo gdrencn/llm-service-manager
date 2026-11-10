@@ -24,7 +24,9 @@ class ModelSettingsPassthroughTests(unittest.TestCase):
             m.pop("mtp_supported")
             before = copy.deepcopy(c)
             with (
-                patch.object(preflight, "available_backends", return_value=["llama.cpp"]),
+                patch.object(
+                    preflight, "available_backends", return_value=["llama.cpp"]
+                ),
                 patch.object(preflight, "program", return_value="/bin/true"),
             ):
                 self.assertEqual(preflight.preflight(c, "llama.cpp")[0], [])

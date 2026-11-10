@@ -39,8 +39,9 @@ with UI(translate=lambda zh, en: zh) as ui:
 | `input(title, default="")` | 返回字符串。业务层解析数字、校验范围或保存。 |
 | `loading(title, work)` | 立即显示检测提示，在后台调用 `work(cancel_event)`；Esc/EOF/Ctrl+C 设置取消事件并恢复终端。回调必须配合取消且不得写终端；完成值返回，异常传播。 |
 | `document(title, lines, actions, *, focus=0)` | 完整输出所有内容到终端历史，不按终端高度裁剪；底部显示操作菜单。长命令保留原始行，由终端自动折行。 |
-| `text(title, body)` | 保留文字输出，等待 Enter 返回。 |
-| `external(callback, title=None)` | 清除临时菜单，打印分隔标题，调用业务回调，成功后等待 Enter。回调异常原样向应用传播；不重试、不吞错。 |
+| `back()` | 显示单项“返回”菜单；Enter 或 Esc 返回，普通按键不回显。菜单结束后清理临时区域。 |
+| `text(title, body)` | 保留文字输出，显示统一的“返回”菜单项。 |
+| `external(callback, title=None)` | 清除临时菜单，打印分隔标题，调用业务回调，成功后显示统一的“返回”菜单项。回调异常原样向应用传播；不重试、不吞错。 |
 | `clear()` / `finish()` | 只清除本 UI 绘制的临时区域，保留之前输出。 |
 | `rich((文字, 样式), ...)` / `render(...)` | 构造语义样式、根据终端能力着色并按字符显示宽度裁剪。 |
 

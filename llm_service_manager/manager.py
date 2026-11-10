@@ -12,6 +12,7 @@ from .config import Error, model, value
 from .execution import report_outcome
 from .paths import CONFIG, UNITS
 from .preflight import preflight
+from .presentation import t
 from .services import Services as Ops
 from .storage import atomic, locked, revision
 from .transaction import read_recovery, restore_file, snapshot
@@ -42,6 +43,13 @@ def switch(c, b, expected, ops=None, config_path=CONFIG):
         pending = state / "pending.json"
         if pending.exists():
             raise Error("上次切换未完成，请先运行 llmsm recover")
+        ops.event(
+            "progress",
+            message=t(
+                "检查配置、模型文件及当前服务状态…",
+                "Checking configuration, model files and current services…",
+            ),
+        )
         errors, notes = preflight(c, b)
         if errors:
             raise Error("\n".join(errors))
@@ -88,13 +96,34 @@ def switch(c, b, expected, ops=None, config_path=CONFIG):
         atomic(pending, json.dumps(txn))
         try:
             ops.event("transaction-start", target=c["target"])
+            ops.event(
+                "progress",
+                message=t(
+                    "停止当前底座，检查监听端口…",
+                    "Stopping the current backend and checking the listening port…",
+                ),
+            )
             ops.stop()
             ops.check_bind(c)
+            ops.event(
+                "progress",
+                message=t("写入底座原生配置…", "Writing native backend configuration…"),
+            )
             for p, text in files.items():
                 if p != str(config_path):
                     ops.write(p, text)
             ops.run(["systemctl", "daemon-reload"])
             ops.prepare_runtime(c, files)
+            ops.event(
+                "progress",
+                message=t(
+                    "启动模型并检查加载状态：",
+                    "Starting model and checking load status: ",
+                )
+                + b
+                + " / "
+                + model(c, b)["name"],
+            )
             startup_started = time.time()
             try:
                 ops.run(["systemctl", "start", UNITS[b]], timeout=900)
@@ -108,6 +137,13 @@ def switch(c, b, expected, ops=None, config_path=CONFIG):
                 raise capture(ops, c, b, ex, startup_started) from ex
             if ops.active() != [UNITS[b]]:
                 raise Error("底座互斥检查未通过")
+            ops.event(
+                "progress",
+                message=t(
+                    "设置自启动并保存配置…",
+                    "Applying boot settings and saving configuration…",
+                ),
+            )
             ops.boot_target(b, value(c, "autostart"))
             ops.write(config_path, files[str(config_path)])
             atomic(state / "last-success.json", json.dumps(txn))
@@ -120,13 +156,18 @@ def switch(c, b, expected, ops=None, config_path=CONFIG):
                 rollback_error = ex
                 report_outcome(ops, "rollback-failed", error=str(ex))
             from .startup_failure import StartupFailure
-            from .presentation import t
 
             if isinstance(failure, StartupFailure):
                 outcome = (
-                    t("回滚未完成；请运行 llmsm recover。", "Rollback incomplete; run llmsm recover.")
-                    if rollback_error is not None else
-                    t("已恢复切换前的配置和服务。", "Configuration and services restored to their previous state.")
+                    t(
+                        "回滚未完成；请运行 llmsm recover。",
+                        "Rollback incomplete; run llmsm recover.",
+                    )
+                    if rollback_error is not None
+                    else t(
+                        "已恢复切换前的配置和服务。",
+                        "Configuration and services restored to their previous state.",
+                    )
                 )
                 raise StartupFailure(str(failure) + "\n\n" + outcome) from failure
             raise
@@ -142,6 +183,13 @@ def recover(ops=None, lock=True):
     if not p.exists():
         raise Error("没有待恢复事务")
     txn, restored = read_recovery(p)
+    ops.event(
+        "progress",
+        message=t(
+            "正在回滚：恢复切换前的配置、服务和自启动状态…",
+            "Rolling back configuration, services and boot settings…",
+        ),
+    )
     ops.stop()
     if txn.get("ollama_model") and not txn.get("ollama_restored"):
         ops.restore_ollama(txn["ollama_model"])

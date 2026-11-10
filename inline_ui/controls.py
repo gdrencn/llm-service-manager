@@ -273,11 +273,21 @@ class UI:
                 worker.join(timeout=0.8)
             self.clear()
 
+    def back(self):
+        """A reusable return action, never an editable confirmation field."""
+        print(flush=True)
+        try:
+            self.choose(self.t("操作", "Actions"), [("back", self.t("返回", "Back"))])
+        except Cancelled:
+            pass
+        finally:
+            self.clear()
+
     def text(self, title, body):
         self.clear()
         boundary(title)
         print(str(body))
-        input(self.t("\n按 Enter 返回…", "\nPress Enter to return…"))
+        self.back()
 
     def input(self, title, default=""):
         if not self.interactive():
@@ -345,4 +355,4 @@ class UI:
         self.clear()
         boundary(title or self.t("执行结果", "Execution output"))
         fn()
-        input(self.t("\n按 Enter 返回菜单…", "\nPress Enter to return to the menu…"))
+        self.back()
