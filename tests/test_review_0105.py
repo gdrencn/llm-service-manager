@@ -176,7 +176,9 @@ class StatusReviewTests(unittest.TestCase):
             return subprocess.CompletedProcess(args, 1, "LoadState=not-found\n")
 
         ops.run.side_effect = run
-        ops.http.return_value = {"status": "ok"}
+        ops.http.return_value = {
+            "data": [{"id": "model", "status": {"value": "loaded"}}]
+        }
         with patch.object(status, "available_backends", return_value=[]):
             data = status.collect(fixture(), ops)
         self.assertEqual(data["services"]["llama.cpp"]["ActiveState"], "active")

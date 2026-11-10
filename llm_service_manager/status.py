@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .availability import available_backends
 from .config import SPECS, Error, address, model, value
+from .model_lifecycle import base_url, ollama_models, router_models
 from .paths import BACKENDS, existing_unit
 from .presentation import formatted, label, render, rich, section, t
 from .services import Services as Ops
@@ -60,7 +61,7 @@ def collect(c, ops=None):
     # Only query the endpoint when exactly one owned service is running.
     if len(active) == 1:
         b = active[0]
-        url = "http://" + address(value(c, "host"), value(c, "port"), True)
+        url = base_url(c)
         endpoint = (
             "/api/ps" if b == "ollama" else "/v1/status" if b == "strata" else "/models"
         )
@@ -68,11 +69,10 @@ def collect(c, ops=None):
             data = ops.http(url + endpoint, timeout=3)
             if not isinstance(data, dict):
                 raise ValueError("状态接口返回格式无效")
-            if b == "ollama" and (
-                not isinstance(data.get("models"), list)
-                or any(not isinstance(m, dict) for m in data["models"])
-            ):
-                raise ValueError("Ollama 模型状态格式无效")
+            if b == "ollama":
+                ollama_models(data)
+            elif b == "llama.cpp":
+                router_models(data)
             if (
                 b == "strata"
                 and "activity" in data
@@ -80,7 +80,7 @@ def collect(c, ops=None):
             ):
                 raise ValueError("Strata 活动状态格式无效")
             result["runtime"] = {"backend": b, "response": data}
-        except (OSError, ValueError) as ex:
+        except (Error, OSError, ValueError) as ex:
             result["errors"].append(
                 t("模型接口暂不可查询：", "Model endpoint unavailable: ") + str(ex)
             )
@@ -246,8 +246,6 @@ def show(c, snapshot=None):
             if k in data.get("activity", {}):
                 field(t(zh, en), data["activity"][k])
     elif b == "llama.cpp":
-        from .model_lifecycle import router_models
-
         labels = {
             "loaded": t("已加载", "Loaded"),
             "unloaded": t("已卸载；新请求会自动加载", "Unloaded; reloads on request"),

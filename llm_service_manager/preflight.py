@@ -7,12 +7,11 @@ from pathlib import Path
 from .artifacts import (
     complete_asset,
     gguf_set,
-    ollama_manifest,
     strata_assets,
 )
 from .availability import available_backends, executable, program
 from .config import model, validate, value, warnings
-from .ollama_store import manifest_path
+from .ollama_store import manifest_path, ollama_manifest
 from .paths import ollama_roots
 
 

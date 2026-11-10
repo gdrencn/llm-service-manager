@@ -6,7 +6,6 @@ from pathlib import Path
 
 from .artifacts import (
     complete_asset,
-    complete_ollama,
     embedded_mtp,
     gguf,
     gguf_set,
@@ -14,6 +13,7 @@ from .artifacts import (
 )
 from .availability import executable, program
 from .commands import recipe_specs
+from .ollama_store import complete_ollama
 from .paths import hf_cache, ollama_roots, strata_engines, strata_install
 
 

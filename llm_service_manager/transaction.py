@@ -49,6 +49,8 @@ def read_recovery(path):
         config_path = txn.get("config_path", str(CONFIG))
         if not isinstance(config_path, str) or not Path(config_path).is_absolute():
             raise ValueError("事务配置路径无效")
+        if txn["active"] and config_path not in txn["files"]:
+            raise ValueError("事务缺少恢复运行服务所需的配置快照")
         metadata = txn.get("metadata", {})
         if not isinstance(metadata, dict) or set(metadata) - set(txn["files"]):
             raise ValueError("事务文件属性格式错误")

@@ -15,7 +15,6 @@ from unittest.mock import Mock, patch
 from test_config import STRATA, fixture
 
 from llm_service_manager import (
-    artifacts,
     availability,
     config,
     discovery,
@@ -26,6 +25,7 @@ from llm_service_manager import (
     tui,
 )
 from llm_service_manager.adapters import native
+from llm_service_manager.ollama_store import manifest_relative
 
 
 class HardeningTests(unittest.TestCase):
@@ -124,7 +124,7 @@ class HardeningTests(unittest.TestCase):
             ("team/model:q4", "registry.ollama.ai/team/model/q4"),
             ("localhost:5000/team/model:q4", "localhost:5000/team/model/q4"),
         ]:
-            self.assertEqual(str(artifacts.manifest_relative(source)), path)
+            self.assertEqual(str(manifest_relative(source)), path)
 
     def test_filtered_native_render_skips_other_broken_files(self):
         c = fixture()

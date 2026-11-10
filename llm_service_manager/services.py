@@ -7,6 +7,7 @@ from pathlib import Path
 from .availability import program
 from .config import Error, address, model, value
 from .execution import Operations
+from .model_lifecycle import base_url, ollama_models, wait_router_loaded
 from .model_names import public_name
 from .network import check_bind
 from .paths import (
@@ -129,7 +130,7 @@ class Services(Operations):
             )
 
     def wait_ready(self, c, b, unit=None):
-        url = "http://" + address(value(c, "host"), value(c, "port"), True)
+        url = base_url(c)
         unit = unit or UNITS[b]
         deadline = time.monotonic() + 900
         endpoint = "/api/tags" if b == "ollama" else "/health"
@@ -184,18 +185,10 @@ class Services(Operations):
             if not isinstance(result, dict) or result.get("error"):
                 raise Error("Ollama预加载失败")
             ps = self.http(url + "/api/ps")
-            if (
-                not isinstance(ps, dict)
-                or not isinstance(ps.get("models"), list)
-                or any(
-                    not isinstance(x, dict) or not isinstance(x.get("name"), str)
-                    for x in ps["models"]
-                )
-            ):
-                raise Error("Ollama模型状态返回格式无效")
+            rows = ollama_models(ps)
             loaded = [
                 x
-                for x in ps.get("models", [])
+                for x in rows
                 if x.get("name", "").removesuffix(":latest")
                 == tag.removesuffix(":latest")
             ]
@@ -208,24 +201,27 @@ class Services(Operations):
             ):
                 raise Error("未确认模型100% GPU加载，拒绝接受本次切换")
         elif b == "llama.cpp":
-            from .model_lifecycle import wait_router_loaded
-
             wait_router_loaded(self, url, public_name(m))
-            inv = self.run(
-                ["systemctl", "show", unit, "--property=InvocationID", "--value"]
-            ).stdout.strip()
-            log = self.run(
-                [
-                    "journalctl",
-                    "_SYSTEMD_INVOCATION_ID=" + inv,
-                    "--no-pager",
-                    "-o",
-                    "cat",
-                ]
-            ).stdout
-            matches = re.findall(r"offloaded\s+(\d+)/(\d+)\s+layers", log)
-            if not matches or any(int(a) != int(z) for a, z in matches):
-                raise Error("日志未确认所有模型层均已加载到GPU")
+            self.check_gpu_offload(unit)
+
+    def check_gpu_offload(self, unit):
+        inv = self.run(
+            ["systemctl", "show", unit, "--property=InvocationID", "--value"]
+        ).stdout.strip()
+        if not re.fullmatch(r"[0-9a-fA-F]{32}", inv) or int(inv, 16) == 0:
+            raise Error("未取得本次服务启动标识，不能用历史日志验证 GPU 加载")
+        log = self.run(
+            [
+                "journalctl",
+                "_SYSTEMD_INVOCATION_ID=" + inv,
+                "--no-pager",
+                "-o",
+                "cat",
+            ]
+        ).stdout
+        matches = re.findall(r"offloaded\s+(\d+)/(\d+)\s+layers", log)
+        if not matches or any(int(a) != int(z) or int(z) <= 0 for a, z in matches):
+            raise Error("日志未确认所有模型层均已加载到GPU")
 
     def restored(self, txn):
         c = read_config(Path(txn.get("config_path", str(CONFIG))))
@@ -240,6 +236,17 @@ class Services(Operations):
             except Error:
                 self.wait_ready(c, backend, unit)
             else:
+                # Recovery must validate the configuration actually restored. An
+                # upgrade can fail while replacing an old single-model unit. This
+                # path only restores that snapshot; new applies remain Router-only.
+                if (
+                    backend == "llama.cpp"
+                    and "--models-preset"
+                    not in Path("/etc/systemd/system", unit).read_text()
+                ):
+                    self.wait_ready(c, backend, unit)
+                    self.check_gpu_offload(unit)
+                    continue
                 modelfile = OLLAMA_MODELFILE
                 legacy = "/etc/ollama/llmsm.Modelfile"
                 if (

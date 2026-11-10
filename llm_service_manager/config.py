@@ -63,7 +63,7 @@ def normalized(raw, home=None, user=None):
         raise Error("配置参数必须包含 value")
     if any(not isinstance(v, dict) for v in raw.get("catalog", [])):
         raise Error("模型目录格式错误")
-    if raw.get("schema", 2) not in (1, 2):
+    if type(raw.get("schema", 2)) is not int or raw.get("schema", 2) not in (1, 2):
         raise Error("不支持的配置版本")
     if set(raw.get("settings", {})) - set(SPECS):
         raise Error("配置包含未知参数")
@@ -200,10 +200,13 @@ def validate(c, backend=None):
     ):
         raise Error("服务home必须为不含控制字符的绝对路径")
     for m in c["catalog"]:
+        required = {"llama.cpp": "path", "strata": "config_path"}.get(m["backend"])
+        if required and (not isinstance(m.get(required), str) or not m[required]):
+            raise Error("模型缺少有效的文件路径：" + required)
         for key in ("path", "vision_path", "mtp_path", "config_path"):
-            if m.get(key) and (
-                not isinstance(m[key], str) or not Path(m[key]).is_absolute()
-            ):
+            if key in m and not isinstance(m[key], str):
+                raise Error("模型路径字段必须是字符串：" + key)
+            if m.get(key) and not Path(m[key]).is_absolute():
                 raise Error("模型文件必须为绝对路径：" + key)
         if m["backend"] == "ollama":
             source = m.get("source", "")

@@ -6,9 +6,10 @@ import json
 import re
 from pathlib import Path
 
-from .artifacts import embedded_mtp, ollama_manifest
+from .artifacts import embedded_mtp
 from .availability import available_backends
 from .model_names import normalize_names
+from .ollama_store import ollama_manifest
 from .ollama_store import sources as ollama_sources
 from .paths import hf_cache, ollama_roots, strata_install
 

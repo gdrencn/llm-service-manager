@@ -104,12 +104,21 @@ class NativeNamesTests(unittest.TestCase):
                     lambda p: str(p) == "/etc/ollama/llmsm.Modelfile",
                 ),
                 patch.object(ops, "ready") as ready,
+                patch.object(
+                    services.Path,
+                    "read_text",
+                    return_value="ExecStart=llama serve --model old.gguf",
+                ),
+                patch.object(ops, "wait_ready") as wait_ready,
+                patch.object(ops, "check_gpu_offload") as gpu,
             ):
                 ops.restored({"active": ["ollama.service", "llm-llama.service"]})
                 self.assertEqual(
                     ready.call_args_list[0].kwargs["modelfile"],
                     "/etc/ollama/llmsm.Modelfile",
                 )
-                self.assertEqual(
-                    ready.call_args_list[1].kwargs["unit"], "llm-llama.service"
+                self.assertEqual(ready.call_count, 1)
+                wait_ready.assert_called_once_with(
+                    fixture(), "llama.cpp", "llm-llama.service"
                 )
+                gpu.assert_called_once_with("llm-llama.service")

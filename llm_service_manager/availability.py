@@ -3,7 +3,8 @@
 import os
 from pathlib import Path
 
-from .artifacts import complete_asset, complete_ollama, gguf_set, strata_assets
+from .artifacts import complete_asset, gguf_set, strata_assets
+from .ollama_store import complete_ollama
 from .paths import BACKENDS, ollama_roots, strata_engines
 
 
