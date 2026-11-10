@@ -83,7 +83,6 @@ class StartupFailureTests(unittest.TestCase):
                 config = Path(directory) / "config.json"
                 with (
                     patch.object(manager, "preflight", return_value=([], [])),
-                    patch.object(manager, "available_backends", return_value=[]),
                     patch.object(manager, "native", return_value={}),
                     patch.object(ops, "ready", side_effect=Error("original failure")),
                     patch.object(

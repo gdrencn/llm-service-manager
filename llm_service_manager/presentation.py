@@ -58,7 +58,7 @@ LABELS = {
     "autostart": "Start selected backend at boot",
     "host": "Listen address",
     "port": "Port",
-    "context": "Context per request (shared)",
+    "context": "Context per request",
     "kv": "KV precision",
     "parallel": "Concurrency",
     "idle_seconds": "Idle unload (seconds, 0 = disabled)",

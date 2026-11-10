@@ -11,11 +11,13 @@ from .artifacts import (
 )
 from .availability import available_backends, executable, program
 from .config import model, validate, value, warnings
+from .config_document import for_backend
 from .ollama_store import manifest_path, ollama_manifest
 from .paths import ollama_roots
 
 
 def preflight(c, b):
+    c = for_backend(c, b)
     validate(c, b)
     m = model(c, b)
     errors = []

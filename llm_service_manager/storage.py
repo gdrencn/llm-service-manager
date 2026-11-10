@@ -8,7 +8,8 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
-from .config import Error, normalized, validate
+from .config import Error
+from .config_document import decode
 from .paths import CONFIG, STATE
 
 
@@ -56,9 +57,8 @@ def read_snapshot(path=CONFIG):
         raw = {} if data is None else json.loads(data)
     except (ValueError, UnicodeError) as ex:
         raise Error("配置 JSON 无效：" + str(ex)) from ex
-    c = normalized(raw)
-    validate(c)
-    if "value" not in raw.get("settings", {}).get("port", {}):
+    c = decode(raw)
+    if "value" not in raw.get("global", {}).get("settings", {}).get("port", {}):
         from .network import initialize_port
 
         initialize_port(c)

@@ -17,6 +17,7 @@ from llm_service_manager import (
     storage,
 )
 from llm_service_manager.adapters import native
+from llm_service_manager.config_document import encode
 from llm_service_manager.execution import Operations
 
 
@@ -45,7 +46,7 @@ class QualityTests(unittest.TestCase):
     def test_snapshot_hashes_the_bytes_that_were_parsed(self):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "config"
-            raw = b'{"settings":{"context":{"value":8192}}}'
+            raw = b'{"ollama":{"settings":{"context":{"value":8192}}}}'
             p.write_bytes(raw)
             original = Path.read_bytes
 
@@ -83,7 +84,7 @@ class QualityTests(unittest.TestCase):
     def test_commit_audit_failure_does_not_roll_back_running_model(self):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "config"
-            p.write_text(json.dumps(fixture()))
+            p.write_text(json.dumps(encode(fixture())))
             ops = FakeOps(Path(tmp) / "state")
 
             def event(kind, **data):
@@ -94,7 +95,6 @@ class QualityTests(unittest.TestCase):
             with (
                 patch.object(manager, "preflight", return_value=([], [])),
                 patch.object(manager, "native", return_value={}),
-                patch.object(manager, "available_backends", return_value=["ollama"]),
             ):
                 manager.switch(fixture(), "ollama", storage.revision(p), ops, p)
             self.assertEqual(json.loads(p.read_text())["target"]["backend"], "ollama")
@@ -222,7 +222,7 @@ class QualityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             p = root / "config"
-            p.write_text(json.dumps(fixture()))
+            p.write_text(json.dumps(encode(fixture())))
             target = root / "external"
             target.write_text("unchanged")
             link = root / "unit"
@@ -231,7 +231,6 @@ class QualityTests(unittest.TestCase):
             with (
                 patch.object(manager, "preflight", return_value=([], [])),
                 patch.object(manager, "native", return_value={str(link): "new"}),
-                patch.object(manager, "available_backends", return_value=["ollama"]),
                 patch.object(ops, "stop") as stop,
             ):
                 with self.assertRaises(config.Error):

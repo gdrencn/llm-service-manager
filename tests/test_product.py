@@ -98,9 +98,7 @@ class ProductTests(unittest.TestCase):
             presentation.load_language()
             self.assertEqual(presentation.LANGUAGE, "en")
             self.assertEqual(tui.main_menu()[0][1], "Switch backend/model")
-            self.assertEqual(
-                presentation.label("context"), "Context per request (shared)"
-            )
+            self.assertEqual(presentation.label("context"), "Context per request")
 
     def test_install_guide_return_never_executes(self):
         ui = Mock()

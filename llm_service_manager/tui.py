@@ -8,6 +8,7 @@ from inline_ui import UI, Cancelled
 from .availability import available_backends, model_present
 from .commands import execute
 from .config import SPECS, Error, model, parse_setting, validate, value
+from .config_document import for_backend
 from .discovery import discover
 from .install_guide import choose_installation
 from .inventory import inventory
@@ -135,7 +136,7 @@ def setting_rows(c, b):
 
 
 def edit(ui, c, b):
-    c = copy.deepcopy(c)
+    c = for_backend(c, b)
     focus = 0
     while True:
         rows, disabled = setting_rows(c, b)
@@ -154,8 +155,8 @@ def edit(ui, c, b):
                     else []
                 ),
                 t(
-                    "共有参数在三个底座间共用；只有当前有效且可修改的项能够编辑。",
-                    "Shared values apply across backends; only active editable fields can be changed.",
+                    "地址、端口和自启动全局共用；其它参数仅保存到当前底座。",
+                    "Address, port and autostart are global; other settings belong to this backend.",
                 ),
             ],
             disabled,

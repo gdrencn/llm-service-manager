@@ -1,7 +1,7 @@
 # llm-service-manager 0.10.5 test
 
 独立开发的 Linux/systemd 本地模型服务管理工具。管理 Ollama、llama.cpp 和 Strata，
-一份共享配置，任一时间仅运行一个底座。仅管理服务端底座及模型。
+一个配置文件保存全局设置与三个底座的独立设置，任一时间仅运行一个底座。仅管理服务端底座及模型。
 
 ## 一条命令开始（test）
 
@@ -150,8 +150,13 @@ recover 是异常中断后的命令行修复入口，不作为普通菜单选项
 
 ## 配置与适配
 
-/etc/llm-service-manager/config.json 每项有 value 和 applies_to。共有项只有一个值，128K就是全部128K，
-256K就是全部256K；不保存每模型的参数覆盖。模型目录只记录身份、文件路径、来源与能力。
+`/etc/llm-service-manager/config.json` 的配置分为四区（schema 3）：
+
+- `global`：运行用户和主目录（`runtime`），监听地址、端口、开机启动当前选择（`settings`）。
+- `ollama`、`llama.cpp`、`strata`：各自的运行参数（`settings`），同一底座的模型共用该底座设置。
+- 参数条目仍包含 `value` 和 `applies_to`。模型目录、各底座模型选择和当前目标仍为文件中的公共元数据。
+
+选择底座后，配置页读取“全局＋该底座”；取消不保存，应用成功后只保存对应区域，并只生成该底座的原生配置。其它底座的原生配置保持不变，切换过去时才应用最新全局地址、端口和该底座参数。自启动互斥与服务切换流程不变。
 
 Strata q8_0 映射 int8；idle_seconds=0 映射为 Ollama -1、llama.cpp -1、Strata 0。
 Strata idle_unload_s 是服务配置；PLE ram 和服务 LimitMEMLOCK=infinity 分别控制驻留策略及锁定权限。
@@ -191,8 +196,8 @@ llama.cpp 固定使用官方 Router 模式，不提供单模型模式开关。�
 
 ## 事务与日志
 
-启动前检查模型/分片/视觉/MTP/引擎，应用时为已安装且配置有效的底座生成原生配置，只启动选定服务并检查就绪与加载状态。
-共享上下文表示每条请求的上下文；llama.cpp 的总上下文池按上下文 × 并发数生成，避免并发增加后每个槽位容量缩水。并发增加会提高资源需求。
+启动前检查模型/分片/视觉/MTP/引擎，应用时只为选定底座生成原生配置，只启动选定服务并检查就绪与加载状态。
+各底座的上下文设置表示每条请求的上下文；llama.cpp 的总上下文池按上下文 × 并发数生成，避免并发增加后每个槽位容量缩水。并发增加会提高资源需求。
 Ollama 检查 size_vram，llama.cpp 检查全层 GPU 加载日志。错误或中断恢复之前配置及服务，包括原文件权限和所有者。
 不自动缩小上下文或降低参数；不保证预检查能预测全部 OOM。恢复不保证保留旧 KV 会话。
 
@@ -239,7 +244,7 @@ Ollama 离线模型检查兼容官方 `manifests` 和 `manifests-v2`、清单软
 
 | 模块 | 唯一职责 |
 |---|---|
-| `config.py` / `paths.py` | 共享参数、校验、解析、路径定义 |
+| `config.py` / `config_document.py` / `paths.py` | 参数定义、校验、解析、路径定义 |
 | `storage.py` / `transaction.py` | 原子写入、锁、文件内容与权限快照、恢复记录校验 |
 | `artifacts.py` / `ollama_store.py` | GGUF、分片、Strata 文件与 Ollama 新旧存储格式检查 |
 | `availability.py` / `discovery.py` / `inventory.py` | 程序可用性、本地模型发现、安装状态 |

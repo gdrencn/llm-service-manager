@@ -7,8 +7,8 @@ import time
 from pathlib import Path
 
 from .adapters import native
-from .availability import available_backends
 from .config import Error, model, value
+from .config_document import encode, for_backend
 from .execution import report_outcome
 from .paths import CONFIG, UNITS
 from .preflight import preflight
@@ -35,6 +35,7 @@ def release(ops=None, config_path=CONFIG):
 
 
 def switch(c, b, expected, ops=None, config_path=CONFIG):
+    c = for_backend(c, b)
     ops = ops or Ops()
     state = ops.state
     with locked(state):
@@ -57,21 +58,12 @@ def switch(c, b, expected, ops=None, config_path=CONFIG):
             ops.event("warning", message=text)
         if b == "llama.cpp":
             ops.check_router(c)
-        installed = available_backends(c)
         files = native(c, backends=[b])
-        for other in installed:
-            if other == b:
-                continue
-            try:
-                files.update(native(c, backends=[other]))
-            except (Error, OSError, ValueError, KeyError, TypeError) as ex:
-                ops.event(
-                    "warning",
-                    message="跳过其它底座的不可用配置：" + other + " / " + str(ex),
-                )
         c = copy.deepcopy(c)
         c["target"] = {"backend": b, "model": model(c, b)["id"]}
-        files[str(config_path)] = json.dumps(c, ensure_ascii=False, indent=2) + "\n"
+        files[str(config_path)] = (
+            json.dumps(encode(c), ensure_ascii=False, indent=2) + "\n"
+        )
         # Verify the selected generated unit before touching the live services.
         unit_path = "/etc/systemd/system/" + UNITS[b]
         if unit_path in files:

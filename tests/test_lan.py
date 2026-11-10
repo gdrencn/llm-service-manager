@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 from test_config import fixture
 
 from llm_service_manager import config, lan, lan_ui, linux_lan, network, storage, tui
+from llm_service_manager.config_document import encode
 
 
 def snapshot(wsl=True, windows=None):
@@ -67,7 +68,7 @@ class PortTests(unittest.TestCase):
                 c, _ = storage.read_snapshot(path)
             self.assertEqual(config.value(c, "port"), 55557)
             self.assertFalse(path.exists())
-            storage.atomic(path, json.dumps(c))
+            storage.atomic(path, json.dumps(encode(c)))
             with patch.object(network, "free_port") as scan:
                 loaded = storage.read_config(path)
             scan.assert_not_called()
@@ -81,7 +82,7 @@ class PortTests(unittest.TestCase):
             raw = {
                 "settings": {"host": {"value": "127.0.0.1"}, "port": {"value": 11434}}
             }
-            path.write_text(json.dumps(raw))
+            path.write_text(json.dumps({"global": raw}))
             before = path.read_bytes()
             with patch.object(network, "free_port") as scan:
                 c = storage.read_config(path)

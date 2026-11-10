@@ -10,6 +10,7 @@ from test_config import FakeOps, fixture
 
 from llm_service_manager import manager, services
 from llm_service_manager.config import Error
+from llm_service_manager.config_document import encode
 from llm_service_manager.model_transaction import rollback_config, runtime_snapshot
 from llm_service_manager.paths import ALL_UNITS, UNITS
 
@@ -50,14 +51,13 @@ class ApplyTransactionTests(unittest.TestCase):
             root = Path(directory)
             config = root / "config.json"
             if not fresh:
-                config.write_text(json.dumps(fixture()))
+                config.write_text(json.dumps(encode(fixture())))
             before = None if fresh else config.read_bytes()
             created = root / "created.ini"
             ops = ModelOps(root / "state")
             ops.fail_compensation = fail_compensation
             with (
                 patch.object(manager, "preflight", return_value=([], [])),
-                patch.object(manager, "available_backends", return_value=["ollama"]),
                 patch.object(
                     manager, "native", return_value={str(created): "candidate"}
                 ),

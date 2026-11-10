@@ -1,4 +1,4 @@
-"""Shared settings, validation and parsing. No per-model overrides."""
+"""Effective settings, validation and parsing. Persistence scopes are separate."""
 
 import copy
 import ipaddress
@@ -13,7 +13,7 @@ from .paths import BACKENDS
 SPECS = {
     "host": ("监听地址", "0.0.0.0", BACKENDS, "text"),
     "port": ("端口", 55555, BACKENDS, "int"),
-    "context": ("每请求上下文 tokens（共享）", 131072, BACKENDS, "int"),
+    "context": ("每请求上下文 tokens", 131072, BACKENDS, "int"),
     "kv": ("KV 精度", "q8_0", BACKENDS, ("q8_0", "q4_0", "f16")),
     "parallel": ("并发", 1, BACKENDS, "int"),
     "idle_seconds": ("空闲卸载秒数（0=不卸载）", 300, BACKENDS, "int"),

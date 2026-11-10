@@ -9,6 +9,7 @@ from unittest.mock import patch
 from llm_service_manager import manager, services, tui
 from llm_service_manager.adapters import native
 from llm_service_manager.config import Error, normalized, validate, value, warnings
+from llm_service_manager.config_document import decode, encode
 from llm_service_manager.paths import UNITS
 
 
@@ -367,7 +368,7 @@ class Transactions(unittest.TestCase):
             config = root / "config.json"
             unit = root / "unit"
             unit.write_text("old-unit")
-            config.write_text(json.dumps(fixture()))
+            config.write_text(json.dumps(encode(fixture())))
             before = config.read_bytes()
             c = fixture()
             c["runtime"] = {"home": tmp, "user": pwd.getpwuid(os.getuid()).pw_name}
@@ -392,7 +393,7 @@ class Transactions(unittest.TestCase):
                         c, "llama.cpp", manager.revision(config), ops, config
                     )
                     self.assertEqual(
-                        value(json.loads(config.read_text()), "context"), 262144
+                        value(decode(json.loads(config.read_text())), "context"), 262144
                     )
                     self.assertEqual(ops.running, ["llama-server-local.service"])
                     self.assertEqual(unit.read_text(), "new-unit")

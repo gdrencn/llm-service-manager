@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .commands import commands
 from .config import BACKENDS, SPECS, Error, model, parse_setting
+from .config_document import for_backend
 from .discovery import discover
 from .manager import recover, release, stop, switch
 from .preflight import preflight
@@ -126,6 +127,7 @@ def main():
     if args.cmd == "models":
         print(json.dumps(c["catalog"], ensure_ascii=False, indent=2))
         return
+    c = for_backend(c, args.backend)
     if args.model:
         c["model_selection"][args.backend] = args.model
     for pair in args.set:
