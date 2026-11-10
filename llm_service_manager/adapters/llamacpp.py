@@ -44,7 +44,9 @@ def render(c, read):
         "spec-type": "draft-mtp" if v("mtp") else "none",
     }
     if v("vision"):
-        params.update(mmproj=m.get("vision_path", ""))
+        params["mmproj-auto"] = "true"
+        if m.get("vision_path"):
+            params["mmproj"] = m["vision_path"]
         params["mmproj-offload"] = "true"
     else:
         params["no-mmproj"] = "true"

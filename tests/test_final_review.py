@@ -73,10 +73,6 @@ class FinalReviewTests(unittest.TestCase):
         for model in ({"path": None}, {"source": []}, {"mtp_supported": "false"}):
             with self.subTest(model=model), self.assertRaises(config.Error):
                 config.normalized({"models": {"llama.cpp": model}})
-        c = fixture()
-        c["catalog"][0]["mtp_supported"] = "false"
-        with self.assertRaises(config.Error):
-            config.validate(c)
 
     def test_small_plain_menu_does_not_confirm_invisible_choice(self):
         script = """import os

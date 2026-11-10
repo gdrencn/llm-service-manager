@@ -37,15 +37,13 @@ def preflight(c, b):
         except (OSError, ValueError) as ex:
             errors.append(label + "不可读取：" + str(ex))
 
-    if value(c, "mtp") and not m.get("mtp_supported"):
-        errors.append("尚未确认该模型支持MTP；请关闭MTP后使用")
     if b == "llama.cpp":
         need(program(c, b), "llama程序", True)
         need(m.get("path"), "模型")
         if m.get("path") and not gguf_set(m["path"]):
             errors.append("GGUF 主模型或分片不完整")
-        if value(c, "vision"):
-            need(m.get("vision_path"), "视觉组件")
+        if value(c, "vision") and m.get("vision_path"):
+            need(m["vision_path"], "视觉组件")
         if value(c, "mtp") and m.get("mtp_path"):
             need(m["mtp_path"], "MTP权重")
     elif b == "ollama":

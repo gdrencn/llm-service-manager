@@ -6,7 +6,6 @@ import json
 import re
 from pathlib import Path
 
-from .artifacts import embedded_mtp
 from .availability import available_backends
 from .model_names import normalize_names
 from .ollama_store import ollama_manifest
@@ -47,7 +46,6 @@ def discover(c):
                 if isinstance(cfg.get("model_name"), str)
                 else p.stem,
                 "config_path": str(p),
-                "mtp_supported": "--mtp" in cfg.get("args", []),
             }
         )
         c["model_selection"].setdefault("strata", ident)
@@ -75,7 +73,6 @@ def discover(c):
                 "name": p.name,
                 "path": str(p),
                 "vision_path": str(mm[0]) if len(mm) == 1 else "",
-                "mtp_supported": bool(draft) or embedded_mtp(p),
                 "mtp_path": draft,
             }
         )
@@ -92,17 +89,8 @@ def discover(c):
             if source in sources:
                 continue
             ident = "ollama-" + hashlib.sha256(source.encode()).hexdigest()[:10]
-            mtp = False
             try:
-                manifest = ollama_manifest(root, source)
-                for layer in manifest.get("layers", []):
-                    if layer.get("mediaType", "").endswith(".model") and re.fullmatch(
-                        r"sha256:[0-9a-f]{64}", layer.get("digest", "")
-                    ):
-                        mtp = embedded_mtp(
-                            root / "blobs" / layer["digest"].replace(":", "-")
-                        )
-                        break
+                ollama_manifest(root, source)
             except (OSError, ValueError, TypeError, AttributeError):
                 continue
             c["catalog"].append(
@@ -111,7 +99,6 @@ def discover(c):
                     "backend": "ollama",
                     "name": source,
                     "source": source,
-                    "mtp_supported": mtp,
                 }
             )
             sources.add(source)

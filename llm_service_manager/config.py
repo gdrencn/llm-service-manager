@@ -162,8 +162,6 @@ def validate(c, backend=None):
         ids.add(m["id"])
         if m["backend"] not in BACKENDS:
             raise Error("未知底座")
-        if "mtp_supported" in m and type(m["mtp_supported"]) is not bool:
-            raise Error("模型 MTP 支持标记必须是布尔值")
         for k, v in m.items():
             if isinstance(v, str) and any(x in v for x in ("\n", "\r", "\x00")):
                 raise Error("模型字段不能包含换行或NUL")
