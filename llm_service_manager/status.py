@@ -9,7 +9,7 @@ from pathlib import Path
 from .availability import available_backends
 from .config import SPECS, Error, address, model, value
 from .model_lifecycle import base_url, ollama_models, router_models
-from .paths import BACKENDS, existing_unit
+from .paths import BACKENDS, UNITS
 from .presentation import formatted, label, render, rich, section, t
 from .services import Services as Ops
 
@@ -19,7 +19,7 @@ def collect(c, ops=None):
     result = {"services": {}, "runtime": {}, "errors": [], "gpu": [], "memory": {}}
     installed = available_backends(c)
     for b in BACKENDS:
-        unit = existing_unit(b)
+        unit = UNITS[b]
         try:
             r = ops.run(
                 [

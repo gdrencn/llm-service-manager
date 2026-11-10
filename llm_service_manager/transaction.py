@@ -46,6 +46,25 @@ def read_recovery(path):
             for u, state in enabled.items()
         ):
             raise ValueError("事务自启动状态格式错误")
+        if "enabled" not in txn:
+            raise ValueError("事务缺少操作前的自启动状态")
+        runtime = txn.get("runtime")
+        if runtime is not None:
+            from .paths import UNITS
+
+            if (
+                not isinstance(runtime, dict)
+                or runtime.get("backend") not in UNITS
+                or type(runtime.get("loaded")) is not bool
+                or txn["active"] != [UNITS[runtime["backend"]]]
+            ):
+                raise ValueError("事务模型驻留状态无效")
+        if "ollama_model" in txn:
+            from .model_transaction import rollback_config
+
+            rollback_config(txn["ollama_model"])
+        if "ollama_restored" in txn and type(txn["ollama_restored"]) is not bool:
+            raise ValueError("事务模型补偿状态无效")
         config_path = txn.get("config_path", str(CONFIG))
         if not isinstance(config_path, str) or not Path(config_path).is_absolute():
             raise ValueError("事务配置路径无效")

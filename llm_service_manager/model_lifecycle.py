@@ -21,7 +21,9 @@ def router_models(data):
         or not isinstance(x["status"].get("value"), str)
         for x in rows
     ):
-        raise Error("未取得官方 llama.cpp Router 模型状态；请应用配置以迁移到 Router")
+        raise Error(
+            "未取得官方 llama.cpp Router 模型状态；当前服务必须使用官方 Router 模式"
+        )
     return rows
 
 

@@ -55,7 +55,6 @@ def normalized(raw, home=None, user=None):
         ("runtime", dict),
         ("catalog", list),
         ("model_selection", dict),
-        ("models", dict),
     ]:
         if key in raw and not isinstance(raw[key], kind):
             raise Error("配置字段类型错误：" + key)
@@ -63,8 +62,10 @@ def normalized(raw, home=None, user=None):
         raise Error("配置参数必须包含 value")
     if any(not isinstance(v, dict) for v in raw.get("catalog", [])):
         raise Error("模型目录格式错误")
-    if type(raw.get("schema", 2)) is not int or raw.get("schema", 2) not in (1, 2):
+    if type(raw.get("schema", 2)) is not int or raw.get("schema", 2) != 2:
         raise Error("不支持的配置版本")
+    if "models" in raw:
+        raise Error("配置只支持 catalog 和 model_selection，不支持 models 字段")
     if set(raw.get("settings", {})) - set(SPECS):
         raise Error("配置包含未知参数")
     c = copy.deepcopy(raw)
@@ -78,28 +79,6 @@ def normalized(raw, home=None, user=None):
         }
     c.setdefault("catalog", [])
     c.setdefault("model_selection", {})
-    for b, m in c.pop("models", {}).items():
-        if b not in BACKENDS:
-            continue
-        if not isinstance(m, dict):
-            raise Error("旧模型配置必须是对象")
-        if any(key in m and not isinstance(m[key], str) for key in ("source", "path")):
-            raise Error("旧模型路径和名称必须是字符串")
-        if "mtp_supported" in m and type(m["mtp_supported"]) is not bool:
-            raise Error("模型 MTP 支持标记必须是布尔值")
-        ident = "initial-" + b.replace(".", "")
-        if not any(x.get("id") == ident for x in c["catalog"]):
-            c["catalog"].append(
-                dict(
-                    m,
-                    id=ident,
-                    backend=b,
-                    name=m.get("source") or Path(m.get("path", b)).name,
-                    mtp_supported=bool(m.get("mtp_supported", False)),
-                )
-            )
-        c["model_selection"].setdefault(b, ident)
-    c.pop("notes", None)
     c.setdefault("target", None)
     from .model_names import normalize_names
 

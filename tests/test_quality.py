@@ -101,18 +101,24 @@ class QualityTests(unittest.TestCase):
             self.assertFalse((ops.state / "pending.json").exists())
             self.assertFalse((ops.state / "last-rollback.json").exists())
 
-    def test_restore_original_unconfigured_ollama_only_waits_for_service(self):
+    def test_restore_unconfigured_native_service_does_not_guess_api_port(self):
         with tempfile.TemporaryDirectory() as tmp:
             ops = services.Services(tmp)
             with (
                 patch.object(
                     services, "read_config", return_value=config.normalized({})
                 ),
-                patch.object(ops, "wait_ready") as wait,
+                patch.object(
+                    ops,
+                    "run",
+                    return_value=subprocess.CompletedProcess([], 0, "active\n"),
+                ) as run,
+                patch.object(ops, "http") as http,
                 patch.object(ops, "ready") as ready,
             ):
-                ops.restored({"active": ["ollama.service"]})
-            wait.assert_called_once()
+                ops.restored({"active": ["ollama.service"], "runtime": None})
+            run.assert_called_once_with(["systemctl", "is-active", "ollama.service"])
+            http.assert_not_called()
             ready.assert_not_called()
 
     def test_process_exits_during_readiness_fail_promptly(self):
@@ -142,7 +148,7 @@ class QualityTests(unittest.TestCase):
             with self.assertRaises(config.Error):
                 config.parse_setting(key, value)
 
-    def test_unknown_schema_and_malformed_legacy_models_are_controlled_errors(self):
+    def test_unsupported_configuration_is_a_controlled_error(self):
         for raw in (
             {"schema": 99},
             {"models": {"ollama": 42}},

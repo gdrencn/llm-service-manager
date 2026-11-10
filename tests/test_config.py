@@ -144,16 +144,10 @@ class ConfigTests(unittest.TestCase):
             "--mmproj", f["/etc/systemd/system/llama-server-local.service"]
         )
 
-    def test_migration_no_overrides(self):
-        c = normalized(
-            {
-                "settings": {"context": {"value": 262144}},
-                "models": {"ollama": {"source": "x"}},
-            }
-        )
-        self.assertEqual(value(c, "context"), 262144)
-        self.assertNotIn("settings", c["catalog"][0])
-        self.assertIn("strata", c["settings"]["idle_seconds"]["applies_to"])
+    def test_only_current_configuration_format_is_supported(self):
+        for raw in ({"schema": 1}, {"models": {"ollama": {"source": "x"}}}):
+            with self.assertRaises(Error):
+                normalized(raw)
 
     def test_working_directory_systemd_syntax(self):
         c = fixture()
@@ -178,12 +172,17 @@ class ConfigTests(unittest.TestCase):
                 patch.object(ops, "ready") as ready,
                 patch.object(ops, "run"),
             ):
-                ops.restored({"active": ["ollama.service"]})
+                ops.restored(
+                    {
+                        "active": ["ollama.service"],
+                        "runtime": {"backend": "ollama", "loaded": True},
+                    }
+                )
                 ready.assert_called_once_with(
                     c,
                     "ollama",
                     unit="ollama.service",
-                    modelfile=services.OLLAMA_MODELFILE,
+                    configure=False,
                 )
 
     def test_boot_target_and_restore(self):
@@ -296,6 +295,23 @@ class ConfigTests(unittest.TestCase):
 
 
 class FakeOps:
+    def snapshot_runtime(self, *args):
+        return None
+
+    def snapshot_ollama(self, c):
+        return {
+            "name": "qwen3.8:latest",
+            "modelfile": "FROM /models/blob",
+            "host": "127.0.0.1",
+            "port": 55555,
+        }
+
+    def restore_ollama(self, record):
+        self.events.append(("restore-ollama", record))
+
+    def clear_new_boot_links(self, txn):
+        self.events.append(("clear-new-boot-links", txn))
+
     def check_router(self, c):
         pass
 

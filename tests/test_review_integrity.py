@@ -36,27 +36,11 @@ class IntegrityTests(unittest.TestCase):
     def test_recovery_requires_config_for_running_service(self):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "pending.json"
-            p.write_text(json.dumps({"active": ["ollama.service"], "files": {}}))
+            p.write_text(
+                json.dumps({"active": ["ollama.service"], "enabled": {}, "files": {}})
+            )
             with self.assertRaisesRegex(config.Error, "配置快照"):
                 transaction.read_recovery(p)
-
-    def test_old_service_is_only_allowed_during_snapshot_restoration(self):
-        ops = services.Services()
-        with (
-            patch.object(services, "read_config", return_value=fixture()),
-            patch.object(
-                services.Path,
-                "read_text",
-                return_value="ExecStart=llama serve --model old.gguf",
-            ),
-            patch.object(ops, "wait_ready") as health,
-            patch.object(ops, "check_gpu_offload") as gpu,
-            patch.object(ops, "ready") as ready,
-        ):
-            ops.restored({"active": ["llama-server-local.service"]})
-            health.assert_called_once()
-            gpu.assert_called_once_with("llama-server-local.service")
-            ready.assert_not_called()
 
     def test_router_restore_still_validates_model_loaded(self):
         ops = services.Services()
@@ -69,7 +53,12 @@ class IntegrityTests(unittest.TestCase):
             ),
             patch.object(ops, "ready") as ready,
         ):
-            ops.restored({"active": ["llama-server-local.service"]})
+            ops.restored(
+                {
+                    "active": ["llama-server-local.service"],
+                    "runtime": {"backend": "llama.cpp", "loaded": True},
+                }
+            )
             ready.assert_called_once()
 
     def test_gpu_confirmation_rejects_missing_invocation_and_zero_layers(self):

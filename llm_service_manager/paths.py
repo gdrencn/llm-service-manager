@@ -15,21 +15,7 @@ UNITS = {
     "llama.cpp": "llama-server-local.service",
     "strata": "strata-local.service",
 }
-LEGACY_UNITS = {
-    "llama.cpp": "llm-llama.service",
-    "strata": "llm-strata.service",
-}
-ALL_UNITS = tuple(UNITS.values()) + tuple(LEGACY_UNITS.values())
-
-
-def existing_unit(backend):
-    """Read old installations before their next transactional configuration apply."""
-    current = UNITS[backend]
-    legacy = LEGACY_UNITS.get(backend)
-    if legacy and not Path("/etc/systemd/system", current).exists():
-        if Path("/etc/systemd/system", legacy).exists():
-            return legacy
-    return current
+ALL_UNITS = tuple(UNITS.values())
 
 
 def ollama_roots(home):

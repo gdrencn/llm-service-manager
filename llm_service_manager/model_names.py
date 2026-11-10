@@ -19,7 +19,7 @@ def public_name(entry):
 
 
 def normalize_names(config):
-    """Migrate legacy aliases without changing catalog IDs or model selections."""
+    """Derive public names from artifacts without changing internal identities."""
     for entry in config.get("catalog", []):
         if not isinstance(entry, dict):
             continue
@@ -30,6 +30,4 @@ def normalize_names(config):
         field = {"llama.cpp": "path", "ollama": "source"}.get(backend)
         if field and isinstance(entry.get(field), str) and entry[field]:
             entry["name"] = public_name(entry)
-        if backend == "ollama":
-            entry.pop("served", None)
     return config

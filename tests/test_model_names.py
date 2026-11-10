@@ -35,15 +35,13 @@ class ModelNamesTests(unittest.TestCase):
                 public_name({"backend": "ollama", "source": source}), expected
             )
 
-    def test_read_migrates_names_not_selection_or_ids(self):
+    def test_read_derives_public_names_without_changing_identity(self):
         c = fixture()
-        c["catalog"][0]["served"] = "qwen3.8-local"
-        migrated = config.normalized(c)
-        self.assertEqual(migrated["model_selection"], c["model_selection"])
-        self.assertEqual([m["id"] for m in migrated["catalog"]], ["o", "l", "s"])
-        self.assertEqual(migrated["catalog"][0]["name"], "qwen3.8:latest")
-        self.assertNotIn("served", migrated["catalog"][0])
-        self.assertEqual(migrated["catalog"][1]["name"], "model")
+        normalized = config.normalized(c)
+        self.assertEqual(normalized["model_selection"], c["model_selection"])
+        self.assertEqual([m["id"] for m in normalized["catalog"]], ["o", "l", "s"])
+        self.assertEqual(normalized["catalog"][0]["name"], "qwen3.8:latest")
+        self.assertEqual(normalized["catalog"][1]["name"], "model")
 
     def test_llama_alias_does_not_leak_internal_id(self):
         c = fixture()
@@ -68,7 +66,6 @@ class ModelNamesTests(unittest.TestCase):
 
     def test_ollama_create_uses_downloaded_tag_even_with_old_alias(self):
         c = fixture()
-        c["catalog"][0]["served"] = "qwen3.8-local"
         with tempfile.TemporaryDirectory() as tmp:
             ops = services.Services(tmp)
             with (
@@ -79,7 +76,7 @@ class ModelNamesTests(unittest.TestCase):
             args = run.call_args.args[0]
             self.assertEqual(args[args.index("create") + 1], "qwen3.8:latest")
 
-    def test_discovery_migrates_already_known_entries(self):
+    def test_discovery_derives_names_for_known_entries(self):
         c = fixture()
         with patch.object(discovery, "available_backends", return_value=[]):
             result = discovery.discover(c)

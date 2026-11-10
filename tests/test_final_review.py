@@ -69,7 +69,7 @@ class FinalReviewTests(unittest.TestCase):
             ],
         )
 
-    def test_malformed_legacy_model_is_a_configuration_error(self):
+    def test_unsupported_models_field_is_a_configuration_error(self):
         for model in ({"path": None}, {"source": []}, {"mtp_supported": "false"}):
             with self.subTest(model=model), self.assertRaises(config.Error):
                 config.normalized({"models": {"llama.cpp": model}})

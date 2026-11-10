@@ -102,12 +102,6 @@ class Operations:
                 print(names[kind], flush=True)
             elif kind == "write":
                 print(t("写入：", "Write: ") + str(data.get("path", "")), flush=True)
-            elif kind == "remove":
-                print(
-                    t("移除旧配置：", "Remove old configuration: ")
-                    + str(data.get("path", "")),
-                    flush=True,
-                )
 
     def run(self, args, check=True, timeout=120):
         self.event("command", argv=args)

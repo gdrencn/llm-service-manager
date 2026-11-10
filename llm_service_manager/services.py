@@ -13,7 +13,6 @@ from .network import check_bind
 from .paths import (
     ALL_UNITS,
     CONFIG,
-    LEGACY_UNITS,
     OLLAMA_MODELFILE,
     STRATA_CONFIG,
     UNITS,
@@ -22,6 +21,28 @@ from .storage import read_config
 
 
 class Services(Operations):
+    def snapshot_runtime(self, config_path, active):
+        from .model_transaction import runtime_snapshot
+
+        return runtime_snapshot(config_path, active, self)
+
+    def snapshot_ollama(self, c):
+        from .model_transaction import ollama_snapshot
+
+        return ollama_snapshot(c, self)
+
+    def restore_ollama(self, record):
+        from .model_transaction import restore_ollama
+
+        restore_ollama(record, self)
+
+    def clear_new_boot_links(self, txn):
+        # Remove links while the just-created unit still exists. After restoring
+        # absent files systemd would no longer list that unit in available_units.
+        for unit in self.available_units():
+            if unit not in txn["enabled"]:
+                self.run(["systemctl", "disable", unit])
+
     def check_router(self, c):
         executable = program(c, "llama.cpp")
         if not executable:
@@ -167,12 +188,13 @@ class Services(Operations):
             timeout=120,
         )
 
-    def ready(self, c, b, unit=None, modelfile=OLLAMA_MODELFILE):
+    def ready(self, c, b, unit=None, modelfile=OLLAMA_MODELFILE, configure=True):
         unit = unit or UNITS[b]
         url = self.wait_ready(c, b, unit)
         m = model(c, b)
         if b == "ollama":
-            self.create_ollama_model(c, modelfile)
+            if configure:
+                self.create_ollama_model(c, modelfile)
             tag = public_name(m)
             request = {
                 "model": tag,
@@ -225,34 +247,20 @@ class Services(Operations):
 
     def restored(self, txn):
         c = read_config(Path(txn.get("config_path", str(CONFIG))))
+        runtime = txn.get("runtime")
         for unit in txn["active"]:
-            backend = next(
-                key
-                for key, val in (*UNITS.items(), *LEGACY_UNITS.items())
-                if val == unit
-            )
-            try:
-                model(c, backend)
-            except Error:
-                self.wait_ready(c, backend, unit)
-            else:
-                # Recovery must validate the configuration actually restored. An
-                # upgrade can fail while replacing an old single-model unit. This
-                # path only restores that snapshot; new applies remain Router-only.
+            backend = next(key for key, val in UNITS.items() if val == unit)
+            if runtime is None or runtime["backend"] != backend:
+                # A pre-existing native service need not have an llmsm model or
+                # listener configuration (e.g. fresh Ollama on its default port).
                 if (
-                    backend == "llama.cpp"
-                    and "--models-preset"
-                    not in Path("/etc/systemd/system", unit).read_text()
+                    self.run(["systemctl", "is-active", unit]).stdout.strip()
+                    != "active"
                 ):
-                    self.wait_ready(c, backend, unit)
-                    self.check_gpu_offload(unit)
-                    continue
-                modelfile = OLLAMA_MODELFILE
-                legacy = "/etc/ollama/llmsm.Modelfile"
-                if (
-                    backend == "ollama"
-                    and not Path(modelfile).exists()
-                    and Path(legacy).exists()
-                ):
-                    modelfile = legacy
-                self.ready(c, backend, unit=unit, modelfile=modelfile)
+                    raise Error("未恢复操作前运行的服务：" + unit)
+                continue
+            self.ready(c, backend, unit=unit, configure=False)
+            if not runtime["loaded"]:
+                from .model_lifecycle import release
+
+                release(c, self)

@@ -10,8 +10,7 @@ from .adapters import native
 from .availability import available_backends
 from .config import Error, model, value
 from .execution import report_outcome
-from .native_names import remove, retired_files
-from .paths import CONFIG, LEGACY_UNITS, UNITS
+from .paths import CONFIG, UNITS
 from .preflight import preflight
 from .services import Services as Ops
 from .storage import atomic, locked, revision
@@ -65,8 +64,6 @@ def switch(c, b, expected, ops=None, config_path=CONFIG):
         c = copy.deepcopy(c)
         c["target"] = {"backend": b, "model": model(c, b)["id"]}
         files[str(config_path)] = json.dumps(c, ensure_ascii=False, indent=2) + "\n"
-        retired = retired_files(files)
-        files.update(retired)
         # Verify the selected generated unit before touching the live services.
         unit_path = "/etc/systemd/system/" + UNITS[b]
         if unit_path in files:
@@ -86,24 +83,22 @@ def switch(c, b, expected, ops=None, config_path=CONFIG):
             "enabled": ops.enabled(),
             "target": c["target"],
             "started": time.time(),
+            "runtime": ops.snapshot_runtime(config_path, previous),
         }
         atomic(pending, json.dumps(txn))
         try:
             ops.event("transaction-start", target=c["target"])
             ops.stop()
             ops.check_bind(c)
-            for unit in LEGACY_UNITS.values():
-                if "/etc/systemd/system/" + unit in retired:
-                    ops.run(["systemctl", "disable", unit])
             for p, text in files.items():
                 if p != str(config_path):
-                    if text is None:
-                        remove(ops, p)
-                    else:
-                        ops.write(p, text)
+                    ops.write(p, text)
             ops.run(["systemctl", "daemon-reload"])
             ops.prepare_runtime(c, files)
             ops.run(["systemctl", "start", UNITS[b]], timeout=900)
+            if b == "ollama":
+                txn["ollama_model"] = ops.snapshot_ollama(c)
+                atomic(pending, json.dumps(txn))
             ops.ready(c, b)
             if ops.active() != [UNITS[b]]:
                 raise Error("底座互斥检查未通过")
@@ -130,6 +125,14 @@ def recover(ops=None, lock=True):
         raise Error("没有待恢复事务")
     txn, restored = read_recovery(p)
     ops.stop()
+    if txn.get("ollama_model") and not txn.get("ollama_restored"):
+        ops.restore_ollama(txn["ollama_model"])
+        # Durable compensation marker: a later recovery retry must not start
+        # Ollama with candidate addresses after original files were restored.
+        txn["ollama_restored"] = True
+        atomic(p, json.dumps(txn))
+        ops.stop()
+    ops.clear_new_boot_links(txn)
     for path, data in restored.items():
         ops.event("restore", path=path)
         restore_file(path, data, txn.get("metadata", {}).get(path))

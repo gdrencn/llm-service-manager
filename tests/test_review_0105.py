@@ -102,7 +102,14 @@ class ConfigurationReviewTests(unittest.TestCase):
             path.unlink()
             journal = Path(tmp) / "pending.json"
             journal.write_text(
-                json.dumps({"files": contents, "metadata": attributes, "active": []})
+                json.dumps(
+                    {
+                        "files": contents,
+                        "metadata": attributes,
+                        "active": [],
+                        "enabled": {},
+                    }
+                )
             )
             txn, restored = transaction.read_recovery(journal)
             real_replace = os.replace
