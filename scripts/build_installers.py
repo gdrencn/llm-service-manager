@@ -2,17 +2,20 @@
 --check only compares text; it never executes an installer.
 """
 
+import json
 import sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 check = "--check" in sys.argv
+stable_path = root / "stable.json"
+stable_ref = json.loads(stable_path.read_text())["tag"] if stable_path.exists() else ""
 helper = (root / "scripts/root.sh").read_text().rstrip()
 sys.path.insert(0, str(root))
 from llm_service_manager import __version__  # noqa: E402 - local source, no installed package required
 
 for name, template, default_ref, install_path in (
-    ("install.sh", "install.sh.in", "", "install.sh"),
+    ("install.sh", "install.sh.in", stable_ref, "install.sh"),
     ("test/install.sh", "install.sh.in", "v" + __version__, "test/install.sh"),
     ("bootstrap.sh", "bootstrap.sh.in", "main", "install.sh"),
     ("test/bootstrap.sh", "bootstrap.sh.in", "v" + __version__, "test/install.sh"),
@@ -42,7 +45,7 @@ if begin in s:
     block = (
         begin
         + "\n```sh\nsh <<'LLMSM_BOOTSTRAP'\n"
-        + (root / "test/bootstrap.sh").read_text()
+        + (root / ("bootstrap.sh" if stable_ref else "test/bootstrap.sh")).read_text()
         + "LLMSM_BOOTSTRAP\n```\n"
         + end
     )

@@ -1,15 +1,15 @@
-# llm-service-manager 0.10.6 test
+# llm-service-manager 0.10.6 stable
 
 独立开发的 Linux/systemd 本地模型服务管理工具。管理 Ollama、llama.cpp 和 Strata，
 一个配置文件保存全局设置与三个底座的独立设置，任一时间仅运行一个底座。仅管理服务端底座及模型。
 
-## 一条命令开始（test）
+## 一条命令开始（stable）
 
 支持 apt/dnf 系 Linux（如 Ubuntu 22.04+、Debian 12+、较新的 Fedora），Python 3.10+。
 目标是全新机器：不要求预装 Python、sudo、curl、模型或底座。下面是一段可整体粘贴执行的入口命令，
 缺 curl/CA 证书时先通过系统包管理器补齐，再获取安装器。安装器自动补齐其余工具依赖。
-当前仅发布 **0.10.6 test**（GitHub Pre-release，标签 `v0.10.6`），尚无 stable。
-下面入口固定安装该 test，不跟随 main 的未发布代码。普通 `install.sh` 在没有 stable 时明确退出，不会偷偷安装 test。
+当前正式版为 **0.10.6 stable**（标签 `stable/0.10.6`），由已验收的 `v0.10.6` test 原样晋级。
+下面入口获取 main 中的 stable 安装器，但产品源码固定下载已晋级标签，不安装 main 的未发布产品代码。
 
 <!-- bootstrap:start -->
 ```sh
@@ -43,7 +43,7 @@ llmsm_bootstrap=$(mktemp)
 trap 'rm -f "$llmsm_bootstrap"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
-curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.6/test/install.sh -o "$llmsm_bootstrap"
+curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/main/install.sh -o "$llmsm_bootstrap"
 sh "$llmsm_bootstrap"
 LLMSM_BOOTSTRAP
 ```
@@ -52,7 +52,7 @@ LLMSM_BOOTSTRAP
 已有 curl 的机器可使用短命令（与上面的入口调用同一个安装器）：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.6/test/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/main/install.sh | sh
 ```
 
 安装完成后运行 `llmsm`。安装器只安装管理工具及其运行依赖，不安装推理底座、下载模型或启动模型服务。
@@ -365,7 +365,7 @@ HTTPS 需要受客户端信任、与访问域名/IP 匹配的证书，以及底�
 ## 发布渠道
 
 - test：`v版本号` 标签，GitHub Release 标记 **Pre-release**，不标记 Latest。test 安装入口固定该标签；Windows 脚本也固定对应标签。
-- stable：未来使用 `stable/版本号` 标签，采用已验收 test 的同一份产品与配对测试产物，标记正式 Release / Latest。未验收不晋级。本次没有 stable。
+- stable：使用 `stable/版本号` 标签，指向已验收 test 的同一提交，采用同一份产品与配对测试产物，标记正式 Release / Latest。未验收不晋级。`stable.json` 记录当前晋级版本，普通安装入口只安装该版本。
 - 发布标签与资产不覆盖；后续修复使用新版本。源代码包包含该版本配对测试，发行资产提供 SHA-256 校验清单。
 - 底座安装和模型下载不属于自动验收范围；安装命令只进行静态核对，测试配置、切换、停止和交互。
 
