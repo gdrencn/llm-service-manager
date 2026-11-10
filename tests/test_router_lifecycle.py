@@ -122,9 +122,11 @@ class RouterTests(unittest.TestCase):
         c["target"] = {"backend": "strata"}
         ops = Mock()
         ops.active.return_value = [UNITS["strata"]]
+        busy = HTTPError("url", 409, "busy", {}, None)
+        self.addCleanup(busy.close)
         ops.http.side_effect = [
             {"loaded": True},
-            HTTPError("url", 409, "busy", {}, None),
+            busy,
         ]
         with self.assertRaisesRegex(Error, "正在处理请求"):
             release(c, ops)
