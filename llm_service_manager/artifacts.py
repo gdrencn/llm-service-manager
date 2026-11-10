@@ -133,7 +133,15 @@ def strata_assets(cfg, vision=True, mtp=True):
         if key in args:
             paths.append(argument(key))
     pack = argument("--pack")
-    paths.extend(pack / name for name in ("dense.bin", "experts.bin", "index.txt"))
+    # Official IQ packs can read experts directly from the GGUF shards. NVFP4
+    # uses packed experts; neither layout requires converting it to the other.
+    expert_table = pack / "native_experts.txt"
+    experts = (
+        "native_experts.txt"
+        if "--native-dense-gguf" not in args and expert_table.is_file()
+        else "experts.bin"
+    )
+    paths.extend(pack / name for name in ("dense.bin", experts, "index.txt"))
     tokenizer = cfg.get("tokenizer")
     if not isinstance(tokenizer, str) or not Path(tokenizer).is_absolute():
         raise ValueError("Strata 缺少有效的 tokenizer 路径")
@@ -161,4 +169,13 @@ def strata_assets(cfg, vision=True, mtp=True):
 
 
 def complete_asset(path):
-    return gguf_set(path) if Path(path).suffix.lower() == ".gguf" else nonempty(path)
+    p = Path(path)
+    if p.suffix.lower() != ".gguf":
+        return nonempty(p)
+    # PLE may reference shard 2 directly; check its entire set through shard 1.
+    match = re.search(r"-(\d{5})-of-(\d{5})", p.name)
+    if match:
+        if not 1 <= int(match[1]) <= int(match[2]):
+            return False
+        p = p.with_name(p.name[: match.start(1)] + "00001" + p.name[match.end(1) :])
+    return gguf_set(p)

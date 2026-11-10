@@ -97,9 +97,14 @@ curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.5
 
 ## 安装大模型和底座
 
-默认只显示必要的安装、下载命令，每条附简短解释。Ollama/llama.cpp 各两条，Strata 三条。
+默认只显示必要的安装、下载命令，每条附简短解释。Ollama/llama.cpp 各两条，Strata 四条。
 交互指南使用全宽清单，每项显示底座、命令和说明，末尾显示绿色勾或“执行”。
 方向键选择，Enter 执行，R 刷新，Esc 返回。底部提供“自动安装全部项”和“返回”。
+
+Strata 清单包含无后缀 NVFP4 和 ISTA-DASLab IQ3_S 两种 Qwen3.8-Flash-Next。
+两条命令均显式启用视觉和 MTP，使用官方安装器下载完整文件并准备运行包/tokenizer，保存到 `~/models/strata`，不启动模型。
+IQ3_S 使用 `--family qwen --model IQ3_S`；两个模型分别检测安装状态，“自动安装全部项”会依次安装所有未完成项。
+参数和文件布局依据 [Strata 官方安装器](https://github.com/Niko1221/Strata/blob/main/setup.py)；不自行下载或转换权重。
 自动安装跳过已安装项，按显示顺序串行执行，出错中断。
 执行前隐藏清单，透传命令输出；成功后刷新本地状态并返回清单。
 长命令自动折行，清单随选中项滚动。终端无法完整显示所选命令时不允许执行。

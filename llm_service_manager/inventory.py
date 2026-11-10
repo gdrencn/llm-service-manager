@@ -57,9 +57,9 @@ def llama_model(c, home):
     return False
 
 
-def strata_model(home):
+def strata_model(home, profile="strata-nvfp4-nvfp4.json"):
     try:
-        cfg = json.loads((strata_install(home) / "strata-nvfp4-nvfp4.json").read_text())
+        cfg = json.loads((strata_install(home) / profile).read_text())
         return all(complete_asset(p) for p in strata_assets(cfg))
     except (OSError, ValueError, TypeError):
         return False
@@ -80,6 +80,7 @@ def inventory(c):
             for p in engines.glob("*")
         ),
         "strata.model": lambda: strata_model(home),
+        "strata.iq3_s": lambda: strata_model(home, "strata-iq3_s.json"),
     }
     rows = []
     for recipe in recipe_specs():

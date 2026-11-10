@@ -78,6 +78,14 @@ def recipe_specs(
                 ),
                 '"$HOME/.local/bin/strata" install -- --family nvfp4 --model NVFP4 --data-dir "$HOME/models/strata" --vision gpu --mtp on --drafter mtp --no-start --no-browser --yes',
             ),
+            (
+                "strata.iq3_s",
+                t(
+                    "下载 IQ3_S 主模型、视觉和 MTP（ISTA-DASLab）",
+                    "Download IQ3_S model, vision and MTP (ISTA-DASLab)",
+                ),
+                '"$HOME/.local/bin/strata" install -- --family qwen --model IQ3_S --data-dir "$HOME/models/strata" --vision gpu --mtp on --drafter mtp --no-start --no-browser --yes',
+            ),
         ],
     }
     return [
@@ -115,6 +123,11 @@ def explanation(backend, cmd):
         return t(
             "补齐官方推理引擎和视觉程序，供下一步模型安装使用。",
             "Install the official inference engine and vision executable needed by model setup.",
+        )
+    if "--model IQ3_S" in cmd:
+        return t(
+            "下载 ISTA-DASLab IQ3_S 全部分片、视觉和 MTP，准备运行包及 tokenizer；保存到 ~/models/strata，完成后不启动模型。",
+            "Download all ISTA-DASLab IQ3_S shards, vision and MTP; prepare the runtime pack and tokenizer in ~/models/strata without starting the model.",
         )
     return t(
         "下载无后缀 NVFP4 的主模型、视觉权重及 MTP，保存到 ~/models/strata；完成后不启动模型。",

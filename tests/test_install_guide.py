@@ -54,7 +54,7 @@ class InstallationTests(unittest.TestCase):
     def test_failure_keeps_table_and_does_not_execute_next_row(self):
         rows = [{"entry": entry, "installed": False} for entry in recipes()]
         ui = Mock()
-        ui.blocks.side_effect = [0, 8]
+        ui.blocks.side_effect = [0, len(rows) + 1]
         with (
             patch.object(tui, "inventory", return_value=rows),
             patch.object(tui, "execute", side_effect=OSError("failed")) as execute,
@@ -137,7 +137,9 @@ class ListTests(unittest.TestCase):
         ):
             tui.installation_list(ui, fixture())
         execute.assert_called_once_with(
-            "all", fixture(), items=[recipes()[i] for i in (1, 3, 5, 6)]
+            "all",
+            fixture(),
+            items=[row["entry"] for row in rows if not row["installed"]],
         )
         ui.clear.assert_called_once()
         ui.text.assert_not_called()
@@ -148,7 +150,7 @@ class ListTests(unittest.TestCase):
     def test_list_failure_returns_without_retry(self):
         rows = [{"entry": entry, "installed": False} for entry in recipes()]
         ui = Mock()
-        ui.blocks.side_effect = [7, 8]
+        ui.blocks.side_effect = [len(rows), len(rows) + 1]
         with (
             patch.object(tui, "inventory", return_value=rows),
             patch.object(tui, "execute", side_effect=OSError("failed")) as execute,

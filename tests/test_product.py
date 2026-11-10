@@ -102,7 +102,7 @@ class ProductTests(unittest.TestCase):
 
     def test_install_guide_return_never_executes(self):
         ui = Mock()
-        ui.blocks.return_value = 8
+        ui.blocks.return_value = len(recipes()) + 1
         rows = [{"entry": entry, "installed": True} for entry in recipes()]
         with (
             patch.object(tui, "inventory", return_value=rows),
