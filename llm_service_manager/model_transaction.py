@@ -9,6 +9,7 @@ from .config import Error, address, model, normalized, validate, value
 from .model_lifecycle import base_url, unloaded
 from .model_names import public_name
 from .paths import UNITS
+from .presentation import t
 from .storage import read_config
 
 
@@ -20,7 +21,22 @@ def runtime_snapshot(config_path, active, ops):
     if not selected or active != [UNITS[selected["backend"]]]:
         return None
     backend = selected["backend"]
-    return {"backend": backend, "loaded": not unloaded(ops, base_url(before), backend)}
+    try:
+        loaded = not unloaded(ops, base_url(before), backend)
+    except (Error, OSError, ValueError) as ex:
+        # A service can be active while its API is still starting or unavailable.
+        # This optional snapshot must not prevent stopping it to switch backends.
+        ops.event(
+            "warning",
+            message=t(
+                "当前服务的模型状态接口不可用；继续切换。若需回滚，将恢复原配置和服务，但无法保证恢复原模型驻留状态。",
+                "The current model status API is unavailable; continuing the switch. Rollback will restore configuration and services, but cannot reproduce unknown model residency.",
+            )
+            + " "
+            + str(ex),
+        )
+        return None
+    return {"backend": backend, "loaded": loaded}
 
 
 def ollama_snapshot(c, ops):

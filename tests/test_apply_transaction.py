@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
+from urllib.error import URLError
 
 from test_config import FakeOps, fixture
 
@@ -42,6 +43,81 @@ class ModelOps(FakeOps):
 
 
 class ApplyTransactionTests(unittest.TestCase):
+    def test_switch_and_rollback_with_old_service_connection_refused(self):
+        for fail in (False, True):
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                path = root / "config.json"
+                c = fixture()
+                c["target"] = {"backend": "strata", "model": "s"}
+                path.write_text(json.dumps(encode(c)))
+                before = path.read_bytes()
+                ops = FakeOps(root / "state", fail=fail)
+                ops.running = [UNITS["strata"]]
+                ops.http = Mock(
+                    side_effect=URLError(
+                        ConnectionRefusedError(111, "Connection refused")
+                    )
+                )
+                ops.snapshot_runtime = lambda p, active: runtime_snapshot(
+                    p, active, ops
+                )
+                with (
+                    patch.object(manager, "preflight", return_value=([], [])),
+                    patch.object(manager, "native", return_value={}),
+                ):
+                    if fail:
+                        with self.assertRaises(Error):
+                            manager.switch(
+                                c, "ollama", manager.revision(path), ops, path
+                            )
+                        self.assertEqual(path.read_bytes(), before)
+                    else:
+                        manager.switch(c, "ollama", manager.revision(path), ops, path)
+                        self.assertEqual(
+                            json.loads(path.read_text())["target"]["backend"], "ollama"
+                        )
+                self.assertEqual(ops.running, [UNITS["strata" if fail else "ollama"]])
+                self.assertFalse((ops.state / "pending.json").exists())
+                record = json.loads(
+                    (
+                        ops.state
+                        / ("last-rollback.json" if fail else "last-success.json")
+                    ).read_text()
+                )
+                self.assertIsNone(record["runtime"])
+
+    def test_unavailable_old_api_does_not_block_switch_snapshot(self):
+        c = fixture()
+        c["target"] = {"backend": "strata", "model": "s"}
+        for error in (
+            URLError(ConnectionRefusedError(111, "Connection refused")),
+            TimeoutError("timed out"),
+            Error("invalid status"),
+        ):
+            with self.subTest(error=error):
+                ops = Mock()
+                ops.http.side_effect = error
+                with patch(
+                    "llm_service_manager.model_transaction.read_config", return_value=c
+                ):
+                    self.assertIsNone(
+                        runtime_snapshot("/config", [UNITS["strata"]], ops)
+                    )
+                ops.event.assert_called_once()
+                self.assertEqual(ops.event.call_args.args, ("warning",))
+                ops.stop.assert_not_called()
+
+    def test_unavailable_api_does_not_hide_invalid_saved_config(self):
+        ops = Mock()
+        with patch(
+            "llm_service_manager.model_transaction.read_config",
+            side_effect=Error("invalid config"),
+        ):
+            with self.assertRaisesRegex(Error, "invalid config"):
+                runtime_snapshot("/config", [UNITS["strata"]], ops)
+        ops.http.assert_not_called()
+
     def test_current_units_only(self):
         self.assertEqual(set(ALL_UNITS), set(UNITS.values()))
         self.assertEqual(len(ALL_UNITS), 3)
