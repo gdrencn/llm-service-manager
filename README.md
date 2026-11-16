@@ -84,7 +84,7 @@ curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/main/in
 菜单和配置输入共用原地刷新区域，不进入全屏。保留输出采用统一空行、标题及分隔线；分隔线上下各留一个空行。
 产品页标题专用青色加粗；统一加强色为 Codex 默认深色 Markdown 加粗文字所用的 #F38BA8，命令用粉色常规字、内容分段标题用粉色加粗；配置及统计值白色加粗；普通文本白色，说明及不可用项灰色。
 菜单和按钮使用背景高亮表示选中状态；输入文字使用终端默认样式和背景，插入位置使用终端原生光标，不指定光标颜色、形状或闪烁方式；成功状态采用 #A6E3A1，链接采用 #89B4FA；警告和错误分别为黄、红。
-配置项同时保留可修改、固定、不适用等文字标签，NO_COLOR 可禁用颜色。
+配置项同时保留可修改、不可修改、不适用等文字标签，NO_COLOR 可禁用颜色。
 菜单显示时隐藏终端光标；退出、取消或交给外部命令时恢复。文本编辑保留自绘输入位置指示。
 方向键选择，Enter 确认，Esc 返回。文本预填当前值，Ctrl+U 清空。返回/取消总在最后，
 默认焦点独立指定。选项仅提供中文/English 语言切换和版本信息。
@@ -191,7 +191,9 @@ Strata 不再调用内部 Python 模块，不固定其 Python 版本或安装版
 
 主菜单的“停止 <底座名称>”只停止该底座的 systemd 服务及其模型子进程，不修改配置或开机自启动设置，便于升级底座。菜单每次返回时重新读取实际服务状态；没有运行底座时隐藏此项。
 
-Strata 配置固定写入 `env.STRATA_ROUTE_TAIL_SKIP="0"` 和 `env.STRATA_ROUTE_PRIOR="0"`，关闭这两项会改变模型路由/计算的加速策略。配置页显示其值并标记“固定”，不可修改；不新增可编辑配置字段，其它原生环境参数保留。每次应用 Strata 配置时写入，需重新启动服务后生效。
+Strata 配置固定写入 `env.STRATA_ROUTE_TAIL_SKIP="0"` 和 `env.STRATA_ROUTE_PRIOR="0"`，关闭这两项会改变模型路由/计算的加速策略。配置页显示其值并标记 `[不可修改]`；不新增可编辑配置字段，其它原生环境参数保留。每次应用 Strata 配置时写入，需重新启动服务后生效。
+
+Strata 和 llama.cpp 的配置页显示 `API_KEY：关闭 [不可修改]`。Strata 生成的 profile 使用官方 `api_key: "none"`，服务清除 `STRATA_API_KEY`；llama.cpp 不传鉴权参数，服务清除 `LLAMA_API_KEY` 和 `LLAMA_ARG_API_KEY_FILE`。只修改生成的配置，不修改原始模型配置或全局环境。应用并重启后生效。Ollama 无对应原生鉴权选项，不显示此项。
 
 llama.cpp 固定使用官方 Router 模式，不提供单模型模式开关。模型参数写入 `/etc/llama.cpp/llama-local.ini`，systemd 启动 Router，官方 `load-on-startup` 加载选定模型；`--models-max 1` 限制同时驻留一个模型。服务使用独立的 `/var/cache/llama-server-local` 缓存，preset 指向现有权重，不复制或重新下载。卸载后通过 `/models` 查询状态不会唤醒模型。
 这里的“开机”指 Linux/systemd 启动；WSL 中指发行版启动，不包含 Windows 自动启动 WSL。

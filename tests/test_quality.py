@@ -157,13 +157,13 @@ class QualityTests(unittest.TestCase):
             with self.assertRaises(config.Error):
                 config.normalized(raw)
 
-    def test_existing_auth_configuration_is_never_silently_removed(self):
-        with self.assertRaises(config.Error):
-            native(
-                fixture(),
-                lambda _: json.dumps(dict(STRATA, api_key="keep-me")),
-                backends=["strata"],
-            )
+    def test_auth_disabled_in_generated_profile_without_changing_source(self):
+        source = dict(STRATA, api_key="keep-me")
+        rendered = native(fixture(), lambda _: json.dumps(source), backends=["strata"])
+        self.assertEqual(
+            json.loads(rendered["/etc/strata/strata-local.json"])["api_key"], "none"
+        )
+        self.assertEqual(source["api_key"], "keep-me")
 
     def test_systemd_home_preserves_dollar_without_exec_expansion(self):
         c = fixture()

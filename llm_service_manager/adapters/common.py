@@ -1,6 +1,7 @@
 """Render native systemd syntax; no shell wrapper or tool runtime dependency."""
 
 from ..paths import UNITS
+from ..policies import unset_environment
 
 
 def unit_quote(s, expand_dollar=True):
@@ -36,5 +37,10 @@ def service(c, b, args, cwd=None, extra=""):
         + " ".join(map(unit_quote, args))
         + "\nRestart=no\nTimeoutStartSec=900\nTimeoutStopSec=60\n"
         + extra
+        + (
+            "UnsetEnvironment=" + " ".join(unset_environment(b)) + "\n"
+            if unset_environment(b)
+            else ""
+        )
         + "\n[Install]\nWantedBy=multi-user.target\n"
     )

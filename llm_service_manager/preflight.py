@@ -78,10 +78,6 @@ def preflight(c, b):
                 or not isinstance(cfg.get("args"), list)
             ):
                 raise ValueError("需要 cwd 和 args")
-            if cfg.get("api_key"):
-                raise ValueError(
-                    "此版本暂不支持管理已启用 API Key 的 Strata 配置；不会移除其认证设置"
-                )
             args = cfg["args"]
             if any(
                 not isinstance(x, str) or any(ord(ch) < 32 for ch in x) for x in args

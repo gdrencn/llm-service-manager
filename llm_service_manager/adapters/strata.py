@@ -19,8 +19,7 @@ def render(c, read):
         return value(c, key)
 
     cfg = json.loads(read(m["config_path"]))
-    if cfg.get("api_key"):
-        raise Error("不自动改写已启用 API Key 的 Strata 配置")
+    cfg["api_key"] = "none"
     env = cfg.get("env")
     if env is not None and not isinstance(env, dict):
         raise Error("Strata env 必须是 JSON 对象")

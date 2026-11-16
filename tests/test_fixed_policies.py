@@ -44,15 +44,42 @@ class FixedPolicyTests(unittest.TestCase):
         for backend in ("ollama", "llama.cpp", "strata"):
             rows, disabled = setting_rows(fixture(), backend)
             self.assertEqual([key for key, _ in rows[-2:]], ["review", "back"])
-            fixed = [(key, str(text)) for key, text in rows if key.startswith("fixed:")]
+            fixed = [
+                (key, str(text))
+                for key, text in rows
+                if key.startswith("fixed:STRATA_")
+            ]
             self.assertEqual(len(fixed), 2 if backend == "strata" else 0)
             for key, text in fixed:
                 self.assertIn(key, disabled)
                 self.assertIn("0", text)
-                self.assertIn("[固定]", text)
+                self.assertIn("[不可修改]", text)
                 self.assertNotIn("不适用", text)
 
     def test_fixed_values_are_not_shared_mutable_state(self):
         values = fixed_environment("strata")
         values["STRATA_ROUTE_PRIOR"] = "1.5"
         self.assertEqual(fixed_environment("strata")["STRATA_ROUTE_PRIOR"], "0")
+
+    def test_authentication_policy_ui_and_units(self):
+        for backend in ("ollama", "llama.cpp", "strata"):
+            rows, disabled = setting_rows(fixture(), backend)
+            rows = dict(rows)
+            if backend == "ollama":
+                self.assertNotIn("fixed:API_KEY", rows)
+                continue
+            self.assertIn("fixed:API_KEY", disabled)
+            self.assertIn("关闭", str(rows["fixed:API_KEY"]))
+            self.assertIn("[不可修改]", str(rows["fixed:API_KEY"]))
+            files = native(fixture(), lambda _: json.dumps(STRATA), backends=[backend])
+            unit = next(
+                text for path, text in files.items() if path.endswith(".service")
+            )
+            expected = (
+                "STRATA_API_KEY"
+                if backend == "strata"
+                else "LLAMA_API_KEY LLAMA_ARG_API_KEY_FILE"
+            )
+            self.assertIn("UnsetEnvironment=" + expected + "\n", unit)
+            self.assertNotIn('"--api-key"', unit)
+            self.assertNotIn('"--api-key-file"', unit)

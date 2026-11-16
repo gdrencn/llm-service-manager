@@ -17,7 +17,7 @@ from .manager import release as release_model
 from .manager import running_backends, stop, switch
 from .network import port_adjustment
 from .paths import CONFIG, PREFERENCES, STATE
-from .policies import fixed_environment
+from .policies import authentication_disabled, fixed_environment
 from .preflight import preflight
 from .presentation import (
     VERSION,
@@ -110,7 +110,7 @@ def setting_rows(c, b):
             state = t("不适用", "Not applicable")
             muted = True
         elif k == "gpu_only":
-            state = t("固定", "Fixed")
+            state = t("不可修改", "Read-only")
             muted = True
         elif k == "reserve_mib" and b == "llama.cpp" and not value(c, "fit"):
             state = t("fit 关闭，不生效", "Inactive: fit off")
@@ -147,7 +147,20 @@ def setting_rows(c, b):
                 rich(
                     (name + " " * (width - cells(name) + 2), "muted"),
                     (val, "muted"),
-                    ("  [" + t("固定", "Fixed") + "]", "muted"),
+                    ("  [" + t("不可修改", "Read-only") + "]", "muted"),
+                ),
+            )
+        )
+    if authentication_disabled(b):
+        key = "fixed:API_KEY"
+        disabled.append(key)
+        rows.append(
+            (
+                key,
+                rich(
+                    ("API_KEY" + " " * (width - 7 + 2), "muted"),
+                    (t("关闭", "Off"), "muted"),
+                    ("  [" + t("不可修改", "Read-only") + "]", "muted"),
                 ),
             )
         )
