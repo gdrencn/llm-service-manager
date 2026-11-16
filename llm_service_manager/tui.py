@@ -17,6 +17,7 @@ from .manager import release as release_model
 from .manager import running_backends, stop, switch
 from .network import port_adjustment
 from .paths import CONFIG, PREFERENCES, STATE
+from .policies import fixed_environment
 from .preflight import preflight
 from .presentation import (
     VERSION,
@@ -99,7 +100,8 @@ def options(ui):
 def setting_rows(c, b):
     rows = []
     disabled = []
-    width = max(cells(label(k)) for k in SPECS)
+    fixed = fixed_environment(b)
+    width = max([cells(label(k)) for k in SPECS] + [cells(k) for k in fixed])
     for k, (_, _, applies, kind) in SPECS.items():
         state = t("可修改", "Editable")
         tone = "value"
@@ -133,6 +135,19 @@ def setting_rows(c, b):
                     (text + padding, "muted" if muted else "key"),
                     (formatted(value(c, k)), tone),
                     ("  [" + state + "]", "muted" if muted else "good"),
+                ),
+            )
+        )
+    for name, val in fixed.items():
+        key = "fixed:" + name
+        disabled.append(key)
+        rows.append(
+            (
+                key,
+                rich(
+                    (name + " " * (width - cells(name) + 2), "muted"),
+                    (val, "muted"),
+                    ("  [" + t("固定", "Fixed") + "]", "muted"),
                 ),
             )
         )

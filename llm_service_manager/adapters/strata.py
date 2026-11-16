@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ..config import Error, model, value
 from ..paths import STRATA_CONFIG, UNITS
+from ..policies import fixed_environment
 from .common import service
 
 
@@ -20,6 +21,10 @@ def render(c, read):
     cfg = json.loads(read(m["config_path"]))
     if cfg.get("api_key"):
         raise Error("不自动改写已启用 API Key 的 Strata 配置")
+    env = cfg.get("env")
+    if env is not None and not isinstance(env, dict):
+        raise Error("Strata env 必须是 JSON 对象")
+    cfg["env"] = {**(env or {}), **fixed_environment(b)}
     args = list(cfg["args"])
 
     def setarg(k, x):

@@ -191,6 +191,8 @@ Strata 不再调用内部 Python 模块，不固定其 Python 版本或安装版
 
 主菜单的“停止 <底座名称>”只停止该底座的 systemd 服务及其模型子进程，不修改配置或开机自启动设置，便于升级底座。菜单每次返回时重新读取实际服务状态；没有运行底座时隐藏此项。
 
+Strata 配置固定写入 `env.STRATA_ROUTE_TAIL_SKIP="0"` 和 `env.STRATA_ROUTE_PRIOR="0"`，关闭这两项会改变模型路由/计算的加速策略。配置页显示其值并标记“固定”，不可修改；不新增可编辑配置字段，其它原生环境参数保留。每次应用 Strata 配置时写入，需重新启动服务后生效。
+
 llama.cpp 固定使用官方 Router 模式，不提供单模型模式开关。模型参数写入 `/etc/llama.cpp/llama-local.ini`，systemd 启动 Router，官方 `load-on-startup` 加载选定模型；`--models-max 1` 限制同时驻留一个模型。服务使用独立的 `/var/cache/llama-server-local` 缓存，preset 指向现有权重，不复制或重新下载。卸载后通过 `/models` 查询状态不会唤醒模型。
 这里的“开机”指 Linux/systemd 启动；WSL 中指发行版启动，不包含 Windows 自动启动 WSL。
 官方安装入口仍只执行显示的官方命令，不混入服务配置或启停动作。
