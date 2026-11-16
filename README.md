@@ -1,4 +1,4 @@
-# llm-service-manager 0.10.7
+# llm-service-manager 0.10.7 stable
 
 独立开发的 Linux/systemd 本地模型服务管理工具。管理 Ollama、llama.cpp 和 Strata，
 一个配置文件保存全局设置与三个底座的独立设置，任一时间仅运行一个底座。仅管理服务端底座及模型。
@@ -8,7 +8,7 @@
 支持 apt/dnf 系 Linux（如 Ubuntu 22.04+、Debian 12+、较新的 Fedora），Python 3.10+。
 目标是全新机器：不要求预装 Python、sudo、curl、模型或底座。下面是一段可整体粘贴执行的入口命令，
 缺 curl/CA 证书时先通过系统包管理器补齐，再获取安装器。安装器自动补齐其余工具依赖。
-当前正式版为 **0.10.6 stable**（标签 `stable/0.10.6`），由已验收的 `v0.10.6` test 原样晋级。
+当前正式版为 **0.10.7 stable**（标签 `stable/0.10.7`），由已验收的 `v0.10.7` test 原样晋级。
 下面入口获取 main 中的 stable 安装器，但产品源码固定下载已晋级标签，不安装 main 的未发布产品代码。
 
 <!-- bootstrap:start -->
