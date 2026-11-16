@@ -142,6 +142,11 @@ def unpack(archive, destination):
     ):
         if not (destination / name).is_file():
             raise Error("Incomplete release archive: " + name)
+    # The launcher imports before requesting sudo. A restrictive root umask must
+    # not make the next invocation inaccessible to the ordinary installing user.
+    for directory in destination.rglob("*"):
+        if directory.is_dir():
+            directory.chmod(0o755)
 
 
 def validate_candidate(candidate, number, config):
@@ -185,6 +190,7 @@ def activate(archive, number, *, root=ROOT, config=CONFIG, validate=validate_can
         )
     releases = root / "releases"
     releases.mkdir(parents=True, exist_ok=True)
+    releases.chmod(0o755)
     candidate = Path(tempfile.mkdtemp(prefix=number + "-", dir=releases))
     link = root / (".current-" + candidate.name)
 

@@ -3,6 +3,7 @@
 import hashlib
 import io
 import json
+import os
 import tarfile
 import tempfile
 import unittest
@@ -116,6 +117,18 @@ class UpdateTests(unittest.TestCase):
             self.assertFalse(self.run_update(current=current, fetch=fetch))
             self.assertEqual(fetch.call_count, 1)
             self.assert_preserved()
+
+    def test_restrictive_umask_keeps_updated_launcher_imports_readable(self):
+        previous = os.umask(0o077)
+        try:
+            self.assertTrue(self.run_update())
+        finally:
+            os.umask(previous)
+        candidate = (self.root / "current").resolve()
+        for path in [self.root / "releases", candidate, *candidate.rglob("*")]:
+            self.assertEqual(
+                path.stat().st_mode & 0o777, 0o755 if path.is_dir() else 0o644
+            )
 
     def test_bad_checksum_leaves_old_version(self):
         def bad(url, path, limit):

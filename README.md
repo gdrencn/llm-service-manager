@@ -1,4 +1,4 @@
-# llm-service-manager 0.10.6 stable
+# llm-service-manager 0.10.7
 
 独立开发的 Linux/systemd 本地模型服务管理工具。管理 Ollama、llama.cpp 和 Strata，
 一个配置文件保存全局设置与三个底座的独立设置，任一时间仅运行一个底座。仅管理服务端底座及模型。
@@ -308,7 +308,7 @@ Linux 能绑定不等于 Windows 同号端口可用，也不代表局域网已�
 随项目提供 [`scripts/windows-lan.ps1`](scripts/windows-lan.ps1)。在普通 Windows PowerShell 执行下面一行；脚本列出发行版供选择，端口默认 55555，可交互修改：
 
 ```powershell
-irm 'https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.6/scripts/windows-bootstrap.ps1' | iex
+irm 'https://raw.githubusercontent.com/gdrencn/llm-service-manager/v0.10.7/scripts/windows-bootstrap.ps1' | iex
 ```
 
 启动先检查 WSL 和微软原生 Sudo for Windows（Inline 模式）；未启用或模式不对时，明确提示在管理员 PowerShell 运行 `sudo config --enable normal`，再回到普通窗口重新运行；缺少组件和系统策略限制分别说明。没有备用提权实现，不自动启用 sudo，也不安装第三方工具。
@@ -368,7 +368,7 @@ HTTPS 需要受客户端信任、与访问域名/IP 匹配的证书，以及底�
 
 更新包先解压到独立目录，在独立进程中检查代码导入、版本号和现有配置兼容性，通过后原子切换 `current`。失败保留旧版本；成功后返回即退出 llmsm，重新运行使用新版。原安装目录保留，不修改配置或重启底座、模型服务。该功能没有后台检查、定时任务或常驻进程。
 
-此入口从后续包含更新功能的版本开始提供；0.10.6 及更早发布包需要先通过首页安装命令更新一次工具。
+此入口从 0.10.7 开始提供；0.10.6 及更早发布包需要先通过首页安装命令更新一次工具。
 
 ## 发布渠道
 

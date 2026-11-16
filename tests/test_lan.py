@@ -12,6 +12,7 @@ from test_config import fixture
 
 from llm_service_manager import config, lan, lan_ui, linux_lan, network, storage, tui
 from llm_service_manager.config_document import encode
+from llm_service_manager.windows_lan import command as windows_command
 
 
 def snapshot(wsl=True, windows=None):
@@ -203,9 +204,7 @@ class LanTests(unittest.TestCase):
         ):
             lan_ui.show(ui)
         self.assertEqual(ui.document.call_args.args[2], [("back", "返回")])
-        self.assertIn(
-            "v0.10.6/scripts/windows-bootstrap.ps1", str(ui.document.call_args.args[1])
-        )
+        self.assertIn(windows_command(), str(ui.document.call_args.args[1]))
         ui.external.assert_not_called()
 
     def test_bad_network_query_is_unknown_not_false_success(self):

@@ -212,6 +212,7 @@ function Confirm-LanSetup([int]$ServicePort, [string]$IP, [hashtable]$State, $La
     if (-not (Test-FirewallTarget $active $ServicePort $owner)) {
         throw 'Firewall verification failed. Domain policy or other rules may override local settings.'
     }
+    Write-Host ('$ Test-NetConnection -ComputerName 127.0.0.1 -Port ' + $ServicePort + ' -InformationLevel Quiet') -ForegroundColor DarkGray
     if (-not (Test-NetConnection -ComputerName '127.0.0.1' -Port $ServicePort -InformationLevel Quiet -WarningAction SilentlyContinue)) { throw 'The forwarding listener is not reachable yet. Check IP Helper and port reservations.' }
     foreach ($item in $lan) {
         foreach ($local in $item.IPv4Address) {

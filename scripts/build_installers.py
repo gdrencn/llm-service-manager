@@ -19,6 +19,7 @@ for name, template, default_ref, install_path in (
     ("test/install.sh", "install.sh.in", "v" + __version__, "test/install.sh"),
     ("bootstrap.sh", "bootstrap.sh.in", "main", "install.sh"),
     ("test/bootstrap.sh", "bootstrap.sh.in", "v" + __version__, "test/install.sh"),
+    ("scripts/windows-bootstrap.ps1", "windows-bootstrap.ps1.in", "", ""),
 ):
     content = (
         (root / "scripts" / template)
@@ -27,6 +28,7 @@ for name, template, default_ref, install_path in (
         .replace("@DEFAULT_REF@", default_ref)
         .replace("@BOOTSTRAP_REF@", default_ref)
         .replace("@INSTALL_PATH@", install_path)
+        .replace("@VERSION_REF@", "v" + __version__)
     )
     path = root / name
     if check:
