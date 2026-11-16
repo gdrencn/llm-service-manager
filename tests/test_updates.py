@@ -229,6 +229,7 @@ class UpdateTests(unittest.TestCase):
                 patch.object(tui, "read_snapshot", return_value=({}, "revision")),
                 patch.object(tui, "discover", side_effect=lambda c: c),
                 patch.object(tui, "options", return_value=result),
+                patch.object(tui, "running_backends", return_value=[]),
             ):
                 tui.run_menu(ui)
             self.assertEqual(ui.choose.call_count, 1 if result else 2)

@@ -77,6 +77,7 @@ curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/main/in
 * 安装大模型和底座
 * 查看当前模型和服务状态
 * 释放资源
+* 停止 <底座名称>（仅显示实际运行的底座）
 * 选项
 * 退出
 
@@ -187,6 +188,8 @@ systemd 单元及参数文件由 llmsm 写入，属于系统配置；不是三�
 Strata 不再调用内部 Python 模块，不固定其 Python 版本或安装版本目录。
 
 “释放资源”使用底座官方卸载接口，保留服务，新请求自动加载模型，不取消保存的自启选项。`llmsm stop` 明确停止服务；切换底座时也会停止旧服务以释放端口。
+
+主菜单的“停止 <底座名称>”只停止该底座的 systemd 服务及其模型子进程，不修改配置或开机自启动设置，便于升级底座。菜单每次返回时重新读取实际服务状态；没有运行底座时隐藏此项。
 
 llama.cpp 固定使用官方 Router 模式，不提供单模型模式开关。模型参数写入 `/etc/llama.cpp/llama-local.ini`，systemd 启动 Router，官方 `load-on-startup` 加载选定模型；`--models-max 1` 限制同时驻留一个模型。服务使用独立的 `/var/cache/llama-server-local` 缓存，preset 指向现有权重，不复制或重新下载。卸载后通过 `/models` 查询状态不会唤醒模型。
 这里的“开机”指 Linux/systemd 启动；WSL 中指发行版启动，不包含 Windows 自动启动 WSL。

@@ -18,11 +18,21 @@ from .storage import atomic, locked, revision
 from .transaction import read_recovery, restore_file, snapshot
 
 
-def stop(ops=None):
+def running_backends(ops=None):
+    """Report actual service state, independent of saved model selection/files."""
+    active = (ops or Ops(quiet=True)).active()
+    return [backend for backend, unit in UNITS.items() if unit in active]
+
+
+def stop(ops=None, *, backend=None):
     """One locked stop operation shared by CLI and interactive bindings."""
     ops = ops or Ops()
     with locked(ops.state):
-        ops.stop()
+        if backend is None:
+            ops.stop()
+        else:
+            ops.stop(backend=backend)
+        report_outcome(ops, "services-stopped", backend=backend)
 
 
 def release(ops=None, config_path=CONFIG):

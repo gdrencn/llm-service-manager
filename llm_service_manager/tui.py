@@ -14,7 +14,7 @@ from .install_guide import choose_installation
 from .inventory import inventory
 from .lan_ui import show as show_lan
 from .manager import release as release_model
-from .manager import switch
+from .manager import running_backends, stop, switch
 from .network import port_adjustment
 from .paths import CONFIG, PREFERENCES, STATE
 from .preflight import preflight
@@ -32,12 +32,13 @@ from .status import show as show_status
 from .storage import read_snapshot
 
 
-def main_menu():
+def main_menu(active=()):
     return [
         ("switch", t("切换底座/模型", "Switch backend/model")),
         ("commands", t("安装大模型和底座", "Install models and backends")),
         ("status", t("查看当前模型和服务状态", "Current model and service status")),
         ("release", t("释放资源", "Release resources")),
+        *(("stop:" + b, t("停止 ", "Stop ") + b) for b in active),
         ("lan", t("局域网访问", "LAN access")),
         ("options", t("选项", "Options")),
         ("exit", t("退出", "Exit")),
@@ -340,6 +341,21 @@ def release_resources(ui):
         ui.external(unload, t("释放结果", "Release result"))
 
 
+def stop_backend(ui, backend):
+    def shutdown():
+        stop(backend=backend)
+        print(
+            t(
+                "底座已停止或原本已停止，其模型进程一并结束：",
+                "Backend is stopped or was already stopped, including its model processes: ",
+            )
+            + backend
+        )
+        print(t("开机自启动设置保持不变。", "Boot enablement is unchanged."))
+
+    ui.external(shutdown, t("停止 ", "Stop ") + backend)
+
+
 def main():
     load_language()
     ui = UI(translate=t)
@@ -365,16 +381,27 @@ def run_menu(ui):
                 )
             except Error:
                 selected = t("已保存的模型不可用", "Saved model unavailable")
+            details = [t("已保存的选择：", "Saved selection: ") + selected]
+            try:
+                active = running_backends()
+            except (Error, OSError, subprocess.SubprocessError) as ex:
+                active = []
+                details.append(
+                    t("无法查询运行底座：", "Cannot query running backends: ") + str(ex)
+                )
             action = ui.choose(
                 "LLM Service Manager",
-                main_menu(),
-                [t("已保存的选择：", "Saved selection: ") + selected],
+                main_menu(active),
+                details,
             )
             if action == "exit":
                 return
             if action == "options":
                 if options(ui):
                     return
+                continue
+            if action in {"stop:" + backend for backend in active}:
+                stop_backend(ui, action.removeprefix("stop:"))
                 continue
             actions = {
                 "switch": lambda: selection_flow(ui, c, rev),

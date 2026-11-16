@@ -304,6 +304,7 @@ class HardeningTests(unittest.TestCase):
                 patch.object(tui, "read_snapshot", return_value=(c, "<absent>")),
                 patch.object(tui, "discover", side_effect=lambda x: x),
                 patch.object(tui, "available_backends", return_value=[]),
+                patch.object(tui, "running_backends", return_value=[]),
                 patch.object(tui, "switch") as switch,
             ):
                 tui.run_menu(ui)

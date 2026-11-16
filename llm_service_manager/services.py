@@ -114,11 +114,16 @@ class Services(Operations):
             elif state in ("disabled", "not-found", ""):
                 self.run(["systemctl", "disable", u])
 
-    def stop(self):
+    def stop(self, backend=None):
+        if backend is not None and backend not in UNITS:
+            raise Error("未知底座：" + str(backend))
         units = self.active()
+        if backend is not None:
+            units = [unit for unit in units if unit == UNITS[backend]]
         if units:
             self.run(["systemctl", "stop", *units], timeout=120)
-            if self.active():
+            remaining = self.active()
+            if remaining and (backend is None or UNITS[backend] in remaining):
                 raise Error("仍有底座正在运行或停止中，未确认资源释放")
 
     def check_bind(self, c):
