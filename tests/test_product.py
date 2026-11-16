@@ -77,12 +77,13 @@ class ProductTests(unittest.TestCase):
         self.assertIn("release", dict(tui.main_menu()))
         self.assertNotIn("stop", dict(tui.main_menu()))
 
-    def test_options_only_language_version_back(self):
+    def test_options_language_update_version_back(self):
         ui = Mock()
         ui.choose.return_value = "back"
         tui.options(ui)
         self.assertEqual(
-            [k for k, _ in ui.choose.call_args.args[1]], ["language", "version", "back"]
+            [k for k, _ in ui.choose.call_args.args[1]],
+            ["language", "update", "version", "back"],
         )
 
     def test_language_persists_without_model_changes(self):

@@ -49,6 +49,7 @@ def options(ui):
         t("选项", "Options"),
         [
             ("language", t("语言", "Language")),
+            ("update", t("检查更新", "Check for updates")),
             ("version", t("版本信息", "Version information")),
             ("back", t("返回", "Back")),
         ],
@@ -63,6 +64,17 @@ def options(ui):
         )
         if lang != "back":
             set_language(lang)
+    elif action == "update":
+        from .updates import check_and_update
+
+        updated = False
+
+        def update():
+            nonlocal updated
+            updated = check_and_update()
+
+        ui.external(update, t("检查更新", "Check for updates"))
+        return updated
     elif action == "version":
         ui.text(
             t("版本信息", "Version information"),
@@ -360,9 +372,12 @@ def run_menu(ui):
             )
             if action == "exit":
                 return
+            if action == "options":
+                if options(ui):
+                    return
+                continue
             actions = {
                 "switch": lambda: selection_flow(ui, c, rev),
-                "options": lambda: options(ui),
                 "lan": lambda: show_lan(ui),
                 "commands": lambda: installation_list(ui, c),
                 "status": lambda: ui.external(
