@@ -1,5 +1,6 @@
 """Dynamic stop actions use live service identity, never saved model selection."""
 
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -12,6 +13,51 @@ from llm_service_manager.paths import UNITS
 
 
 class StopMenuTests(unittest.TestCase):
+    def test_batched_service_states_include_transitions_and_missing_backends(self):
+        ops = services.Services()
+        for state in (
+            "active",
+            "activating",
+            "deactivating",
+            "reloading",
+            "maintenance",
+            "refreshing",
+            "inactive",
+            "failed",
+        ):
+            output = "\n\n".join(
+                "Id="
+                + unit
+                + "\nActiveState="
+                + (state if backend == "strata" else "inactive")
+                for backend, unit in reversed(list(UNITS.items()))
+            )
+            with patch.object(
+                ops, "run", return_value=subprocess.CompletedProcess([], 0, output)
+            ) as run:
+                self.assertEqual(
+                    ops.active(),
+                    [] if state in ("inactive", "failed") else [UNITS["strata"]],
+                )
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(run.call_args.kwargs["timeout"], 5)
+
+    def test_missing_or_invalid_service_states_never_imply_stopped(self):
+        ops = services.Services()
+        for output in (
+            "",
+            "bus unavailable",
+            "Id=ollama.service\nActiveState=inactive",
+            "Id=ollama.service\nActiveState=unknown",
+        ):
+            with (
+                patch.object(
+                    ops, "run", return_value=subprocess.CompletedProcess([], 0, output)
+                ),
+                self.assertRaises(Error),
+            ):
+                ops.active()
+
     def test_stop_actions_follow_release_and_only_include_running_backends(self):
         for active in ([], ["ollama"], ["llama.cpp"], ["strata"], list(UNITS)):
             keys = [key for key, _ in tui.main_menu(active)]

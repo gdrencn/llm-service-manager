@@ -73,11 +73,45 @@ class Services(Operations):
         return found
 
     def active(self):
+        # One bounded query for menu refresh and lifecycle checks. Do not cache:
+        # another tool or systemd itself may have changed the running service.
+        result = self.run(
+            [
+                "systemctl",
+                "show",
+                *ALL_UNITS,
+                "--property=Id,ActiveState",
+                "--no-pager",
+            ],
+            timeout=5,
+        )
+        states = {}
+        for block in result.stdout.strip().split("\n\n"):
+            fields = dict(
+                line.split("=", 1) for line in block.splitlines() if "=" in line
+            )
+            unit, state = fields.get("Id"), fields.get("ActiveState")
+            if (
+                unit not in ALL_UNITS
+                or unit in states
+                or state
+                not in (
+                    "active",
+                    "activating",
+                    "reloading",
+                    "deactivating",
+                    "inactive",
+                    "failed",
+                    "maintenance",
+                    "refreshing",
+                )
+            ):
+                raise Error("无法确认 systemd 服务状态；未将未知状态视为已停止")
+            states[unit] = state
+        if set(states) != set(ALL_UNITS):
+            raise Error("systemd 服务状态不完整；未将缺失结果视为已停止")
         return [
-            u
-            for u in self.available_units()
-            if self.run(["systemctl", "is-active", u], False).stdout.strip()
-            in ("active", "activating", "reloading", "deactivating")
+            unit for unit in ALL_UNITS if states[unit] not in ("inactive", "failed")
         ]
 
     def enabled(self):
