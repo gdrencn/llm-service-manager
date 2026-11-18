@@ -12,14 +12,14 @@ from .artifacts import (
     strata_assets,
 )
 from .availability import executable, program
-from .commands import recipe_specs
+from .commands import OLLAMA_UNSLOTH_27B, recipe_specs
 from .ollama_store import complete_ollama
 from .paths import hf_cache, ollama_roots, strata_engines, strata_install
 
 
-def ollama_model(home, roots=None):
+def ollama_model(home, roots=None, *, source="qwen3.8:latest"):
     roots = ollama_roots(home) if roots is None else roots
-    return any(complete_ollama(root, "qwen3.8:latest") for root in roots)
+    return any(complete_ollama(root, source) for root in roots)
 
 
 def llama_model(c, home):
@@ -72,6 +72,7 @@ def inventory(c):
     checks = {
         "ollama.install": lambda: program(c, "ollama") is not None,
         "ollama.model": lambda: ollama_model(home),
+        "ollama.unsloth_27b": lambda: ollama_model(home, source=OLLAMA_UNSLOTH_27B),
         "llama.cpp.install": lambda: program(c, "llama.cpp") is not None,
         "llama.cpp.model": lambda: llama_model(c, home),
         "strata.install": lambda: program(c, "strata") is not None,

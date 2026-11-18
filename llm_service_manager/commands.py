@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 from .presentation import boundary, render, rich, t
 
+OLLAMA_UNSLOTH_27B = "hf.co/unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL"
+
 SOURCES = {
     "ollama": "https://ollama.com/download/linux",
     "llama.cpp": "https://github.com/ggml-org/llama.cpp",
@@ -40,6 +42,14 @@ def recipe_specs(
                 "ollama.model",
                 t("下载完整模型包", "Download the complete model package"),
                 "ollama pull " + shlex.quote(ollama_model),
+            ),
+            (
+                "ollama.unsloth_27b",
+                t(
+                    "下载 Unsloth UD-Q4_K_XL（含视觉和内嵌 MTP）",
+                    "Download Unsloth UD-Q4_K_XL with vision and embedded MTP",
+                ),
+                "ollama pull " + OLLAMA_UNSLOTH_27B,
             ),
         ],
         "llama.cpp": [
