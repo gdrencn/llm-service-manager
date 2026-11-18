@@ -98,7 +98,7 @@ curl -fsSL https://raw.githubusercontent.com/gdrencn/llm-service-manager/main/in
 
 ## 安装大模型和底座
 
-默认只显示必要的安装、下载命令，每条附简短解释。Ollama/llama.cpp 各两条，Strata 四条。
+默认只显示必要的安装、下载命令，每条附简短解释。Ollama 提供 `qwen3.8` 和 Unsloth 的 `Qwen3.8-27B-GGUF:UD-Q4_K_XL` 两个下载项，llama.cpp 也提供同一 Unsloth 量化版本。
 交互指南使用全宽清单，每项显示底座、命令和说明，末尾显示绿色勾或“执行”。
 方向键选择，Enter 执行，R 刷新，Esc 返回。底部提供“自动安装全部项”和“返回”。
 

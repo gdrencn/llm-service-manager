@@ -31,6 +31,7 @@ def recipe_specs(
     ollama_model="qwen3.8",
     hf_model="unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL",
 ):
+    download = t("下载 ", "Download ")
     groups = {
         "ollama": [
             (
@@ -40,15 +41,12 @@ def recipe_specs(
             ),
             (
                 "ollama.model",
-                t("下载完整模型包", "Download the complete model package"),
+                download + ollama_model,
                 "ollama pull " + shlex.quote(ollama_model),
             ),
             (
                 "ollama.unsloth_27b",
-                t(
-                    "下载 Unsloth UD-Q4_K_XL（含视觉和内嵌 MTP）",
-                    "Download Unsloth UD-Q4_K_XL with vision and embedded MTP",
-                ),
+                download + OLLAMA_UNSLOTH_27B.removeprefix("hf.co/"),
                 "ollama pull " + OLLAMA_UNSLOTH_27B,
             ),
         ],
@@ -60,10 +58,7 @@ def recipe_specs(
             ),
             (
                 "llama.cpp.model",
-                t(
-                    "下载主模型、视觉和可用的 MTP 权重",
-                    "Download model, vision and available MTP weights",
-                ),
+                download + hf_model,
                 '"$HOME/.local/bin/llama" download -hf '
                 + shlex.quote(hf_model)
                 + " --mmproj-auto --mtp",
@@ -83,16 +78,16 @@ def recipe_specs(
             (
                 "strata.model",
                 t(
-                    "下载 NVFP4 主模型、视觉和 MTP",
-                    "Download NVFP4 model, vision and MTP",
+                    "下载 Qwen3.8-Flash-Next（NVFP4）",
+                    "Download Qwen3.8-Flash-Next (NVFP4)",
                 ),
                 '"$HOME/.local/bin/strata" install -- --family nvfp4 --model NVFP4 --data-dir "$HOME/models/strata" --vision gpu --mtp on --drafter mtp --no-start --no-browser --yes',
             ),
             (
                 "strata.iq3_s",
                 t(
-                    "下载 IQ3_S 主模型、视觉和 MTP（ISTA-DASLab）",
-                    "Download IQ3_S model, vision and MTP (ISTA-DASLab)",
+                    "下载 Qwen3.8-Flash-Next（ISTA-DASLab IQ3_S）",
+                    "Download Qwen3.8-Flash-Next (ISTA-DASLab IQ3_S)",
                 ),
                 '"$HOME/.local/bin/strata" install -- --family qwen --model IQ3_S --data-dir "$HOME/models/strata" --vision gpu --mtp on --drafter mtp --no-start --no-browser --yes',
             ),
@@ -119,6 +114,11 @@ def explanation(backend, cmd):
             "下载安装官方底座程序，不下载模型权重。",
             "Install the official backend software; model weights are downloaded separately.",
         )
+    if cmd == "ollama pull " + OLLAMA_UNSLOTH_27B:
+        return t(
+            "模型包包含视觉组件，MTP 权重已内嵌。",
+            "Includes the vision projector and embedded MTP weights.",
+        )
     if backend == "ollama":
         return t(
             "通过 Ollama 服务下载指定模型包，不加载模型进行推理。",
@@ -126,7 +126,7 @@ def explanation(backend, cmd):
         )
     if backend == "llama.cpp":
         return t(
-            "下载指定量化的主模型权重，并自动下载对应视觉组件和可用的 MTP 权重。",
+            "同时下载配套视觉组件和可用的 MTP 权重。",
             "Download the selected quantized model weights with the matching vision component and available MTP weights.",
         )
     if "update --yes" in cmd:
@@ -140,7 +140,7 @@ def explanation(backend, cmd):
             "Download all ISTA-DASLab IQ3_S shards, vision and MTP; prepare the runtime pack and tokenizer in ~/models/strata without starting the model.",
         )
     return t(
-        "下载无后缀 NVFP4 的主模型、视觉权重及 MTP，保存到 ~/models/strata；完成后不启动模型。",
+        "包含视觉组件和 MTP，保存到 ~/models/strata，完成后不启动模型。",
         "Download the unsuffixed NVFP4 model, vision weights and MTP into ~/models/strata without starting the model.",
     )
 
@@ -148,28 +148,16 @@ def explanation(backend, cmd):
 def introduction():
     return [
         t(
-            "以下为官方命令，可自行复制执行；也可在末尾选择依次执行。",
-            "Copy the official commands below, or choose sequential execution at the end.",
+            "可复制下方官方命令，也可在安装清单中选中一项执行。",
+            "Copy an official command below or select an item in the installation menu.",
         ),
         t(
-            "以配置中的用户运行。下载可能耗时数小时；同一时间只运行一条命令，失败即停止。",
-            "Run as the configured user. Downloads may take hours. Commands run sequentially and stop on failure.",
+            "自动安装按顺序执行未安装项，出错即停止。命令和输出会记入操作记录。",
+            "Automatic installation runs missing items in order and stops on error. Commands and output are logged.",
         ),
         t(
-            "执行入口只按顺序运行下方命令，不额外启停服务、设置底座参数或恢复配置。",
-            "Execution runs only the commands below, without additional service actions, backend settings or configuration restoration.",
-        ),
-        t(
-            "包含主模型、视觉和可用的 MTP；已有文件由官方工具处理。此流程未做从零下载自动验收。",
-            "Includes model, vision and available MTP weights. Official tools handle existing files. Full downloads are not automatically tested.",
-        ),
-        t(
-            "Ollama 官方安装器可能启动服务，pull 需要服务可用；若未就绪，命令会直接报错。",
-            "The official Ollama installer may start its service; pull requires a reachable service and fails if it is unavailable.",
-        ),
-        t(
-            "运行环境：配置中的运行用户、该用户主目录、Bash（pipefail）；命令及输出保留操作记录。",
-            "Execution context: configured user, their home directory, Bash with pipefail; commands and output are logged.",
+            "执行 ollama pull 前，请确保 Ollama 服务可访问。",
+            "Make sure the Ollama service is reachable before running ollama pull.",
         ),
     ]
 
